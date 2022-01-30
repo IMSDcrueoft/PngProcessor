@@ -225,7 +225,7 @@ static void uivector_cleanup(unknown_pointer p)
 {
 	((uivector*)p)->size = ((uivector*)p)->allocsize = 0;
 	lodepng_free(((uivector*)p)->data);
-	((uivector*)p)->data = NULL;
+	((uivector*)p)->data = nullptr;
 }
 
 /*returns 1 if success, 0 if failure ==> nothing done*/
@@ -247,7 +247,7 @@ static uint32_t uivector_resize(uivector* p, size_t size)
 
 static void uivector_init(uivector* p)
 {
-	p->data = NULL;
+	p->data = nullptr;
 	p->size = p->allocsize = 0;
 }
 
@@ -2306,7 +2306,7 @@ uint32_t lodepng_zlib_compress(byte** out, size_t* outsize,
 
 	error = deflate(&deflatedata, &deflatesize, in, insize, settings);
 
-	*out = NULL;
+	*out = nullptr;
 	*outsize = 0;
 	if (!error) {
 		*outsize = deflatesize + 6;
@@ -2945,8 +2945,8 @@ static uint32_t LodePNGUnknownChunks_copy(LodePNGInfo* dest, const LodePNGInfo* 
 
 static void LodePNGText_init(LodePNGInfo* info) {
 	info->text_num = 0;
-	info->text_keys = NULL;
-	info->text_strings = NULL;
+	info->text_keys = nullptr;
+	info->text_strings = nullptr;
 }
 
 static void LodePNGText_cleanup(LodePNGInfo* info) {
@@ -2961,8 +2961,8 @@ static void LodePNGText_cleanup(LodePNGInfo* info) {
 
 static uint32_t LodePNGText_copy(LodePNGInfo* dest, const LodePNGInfo* source) {
 	size_t i = 0;
-	dest->text_keys = NULL;
-	dest->text_strings = NULL;
+	dest->text_keys = nullptr;
+	dest->text_strings = nullptr;
 	dest->text_num = 0;
 	for (i = 0; i != source->text_num; ++i) {
 		CERROR_TRY_RETURN(lodepng_add_text(dest, source->text_keys[i], source->text_strings[i]));
@@ -3000,10 +3000,10 @@ void lodepng_clear_text(LodePNGInfo* info) {
 
 static void LodePNGIText_init(LodePNGInfo* info) {
 	info->itext_num = 0;
-	info->itext_keys = NULL;
-	info->itext_langtags = NULL;
-	info->itext_transkeys = NULL;
-	info->itext_strings = NULL;
+	info->itext_keys = nullptr;
+	info->itext_langtags = nullptr;
+	info->itext_transkeys = nullptr;
+	info->itext_strings = nullptr;
 }
 
 static void LodePNGIText_cleanup(LodePNGInfo* info) {
@@ -3022,10 +3022,10 @@ static void LodePNGIText_cleanup(LodePNGInfo* info) {
 
 static unsigned LodePNGIText_copy(LodePNGInfo* dest, const LodePNGInfo* source) {
 	size_t i = 0;
-	dest->itext_keys = NULL;
-	dest->itext_langtags = NULL;
-	dest->itext_transkeys = NULL;
-	dest->itext_strings = NULL;
+	dest->itext_keys = nullptr;
+	dest->itext_langtags = nullptr;
+	dest->itext_transkeys = nullptr;
+	dest->itext_strings = nullptr;
 	dest->itext_num = 0;
 	for (i = 0; i != source->itext_num; ++i) {
 		CERROR_TRY_RETURN(lodepng_add_itext(dest, source->itext_keys[i], source->itext_langtags[i],
@@ -3094,7 +3094,7 @@ uint32_t lodepng_set_icc(LodePNGInfo* info, CSTR name, const byte* profile, uint
 void lodepng_clear_icc(LodePNGInfo* info) {
 	string_cleanup(&info->iccp_name);
 	lodepng_free(info->iccp_profile);
-	info->iccp_profile = NULL;
+	info->iccp_profile = nullptr;
 	info->iccp_profile_size = 0;
 	info->iccp_defined = 0;
 }
@@ -3119,8 +3119,8 @@ void lodepng_info_init(LodePNGInfo* info) {
 	info->chrm_defined = 0;
 	info->srgb_defined = 0;
 	info->iccp_defined = 0;
-	info->iccp_name = NULL;
-	info->iccp_profile = NULL;
+	info->iccp_name = nullptr;
+	info->iccp_profile = nullptr;
 
 	LodePNGUnknownChunks_init(info);
 #endif /*LODEPNG_COMPILE_ANCILLARY_CHUNKS*/
@@ -5738,7 +5738,7 @@ static uint32_t filter(byte* out, const byte* in, uint32_t w, uint32_t h,
 
 					/*calculate the sum of the result*/
 					if (type == 0) {
-						for (x = 0; x != linebytes; ++x) sum += (unsigned char)(attempt[type][x]);
+						for (x = 0; x != linebytes; ++x) sum += (byte)(attempt[type][x]);
 					}
 					else {
 						for (x = 0; x != linebytes; ++x) {
@@ -6056,7 +6056,7 @@ uint32_t lodepng_encode(byte** out, size_t* outsize,
 {
 	byte* data = 0; /*uncompressed version of the IDAT chunk data*/
 	size_t datasize = 0;
-	ucvector outv = ucvector_init(NULL, 0);
+	ucvector outv = ucvector_init(nullptr, 0);
 	LodePNGInfo info;
 	const LodePNGInfo* info_png = &state->info_png;
 
@@ -6638,7 +6638,7 @@ namespace lodepng {
 		State& state,
 		const byte* in, size_t insize)
 	{
-		byte* buffer = NULL;
+		byte* buffer = nullptr;
 		uint32_t error = lodepng_decode(&buffer, &w, &h, &state, in, insize);
 		if (buffer && !error)
 		{

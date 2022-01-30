@@ -24,7 +24,6 @@ freely, subject to the following restrictions:
 */
 
 #include <iostream>
-#include <filesystem>
 #include "png.h"
 /*
 3 ways to decode a PNG from a file to RGBA pixel data (and 2 in-memory ways).
@@ -82,144 +81,20 @@ freely, subject to the following restrictions:
 //	//the pixels are now in the vector "image", 4 bytes per pixel, ordered RGBARGBA..., use it as texture, draw it, ...
 //	//State state contains extra information about the PNG such as text chunks, ...
 //}
-#define DEBUG false
+#define DEBUG true
 
-#include <sstream>
-#include "clockTimer.h"
-
-enum class Mode :char
+int main(int argc, char* argv[])
 {
-	zoom = 'z',
-	Zoom = 'Z',
-	sharpen = 's',
-	Sharpen = 'S',
-	cut = 'c',
-	Cut = 'C',
-	unknown = '?'
-};
-void help()
-{
-	std::cout << "Check Help Info.\n\n"
-		<< "Help:[--] is a prompt, not an input.\n"
-		<< "Startup parameters-->\n"
-		<< "[default zoom]: z\n"
-		<< "[bicubic zoom]: Z [Feature not currently supported]\n"
-		<< "[sharpen]: s\n"
-		<< "[cut]: c [Feature not currently supported]\n\n"
-		<< "Input Sample-->\n"
-		<< "./exe filename.png z[default zoom] 1.0[zoom ratio:has default value] 0.5[center weight:has default value] 2[Exponent:has default value]\n"
-		<< "[default zoom]\n[zoom ratio(from 0.001 to 32.0)]\n[center weight(from 0.25 to 13.0,0.25:MSAA,1.0:bilinear,>1:sharp)]\n[Exponent(from 1 to 4:0.5,1.0,2.0,4.0)]\n\n"
-		<< "./exe filename.png s[sharpen] 4.0[sharpen ratio:has default value]\n"
-		<< "[sharpen]\n[sharpen ratio(from 0.2 to 16.0)]\n\n"
-		<< "./exe filename.png c[cut] 1024[Horizontal size] 1024[Vertical size]\n" << std::endl;
-}
-
-int main(int argc, char* argv[]) {
-	//const char* filename = argc > 1 ? argv[1] : "test.png";
+#if !DEBUG
+	ImageProcessingTools::commandStartUps(argc, argv);
+#else
 	std::filesystem::path pngfile;
-	char mode = (char)Mode::unknown;
 	clockTimer timer;
-	std::istringstream iss;
-
 	timer.TimerStart();
 
-#if !DEBUG
-	if (argc == 1)
-	{
-		std::cout << "No image or parameters entered!\n";
-		help();
-		exit(0);
-	}
-	else
-		if (argc > 1)
-		{
-			pngfile = argv[1];
-			std::cout << "Input filename:" << pngfile << '\n' << std::endl;
-		}
-
-	if (argc == 2)
-	{
-		std::cout << "Too few parameters.\n";
-		help();
-		exit(0);
-	}
-
-	iss.str(argv[2]);
-	iss >> mode;
-
-	float32_t Ratio = 1.0f;
+	float32_t Ratio = 1.075f;
 	float32_t centerWeight = 0.64f;
-	uint32_t exponent = (uint32_t)ImageProcessingTools::Exponent::square;
-
-	switch (mode)
-	{
-	case (int)Mode::zoom:
-
-
-		if (argc > 3)
-		{
-			iss.clear();
-			iss.str(argv[3]);
-			iss >> Ratio;
-
-			if (argc > 4)
-			{
-				iss.clear();
-				iss.str(argv[4]);
-				iss >> centerWeight;
-
-				if (argc > 5)
-				{
-					iss.clear();
-					iss.str(argv[5]);
-					iss >> exponent;
-				}
-			}
-		}
-
-		std::cout << "Input exponent factor:" << exponent << '\n';
-		Clamp(exponent, 1, 4);
-		std::cout << "Adoption exponent factor:" << exponent << '\n';
-
-		ImageProcessingTools::zoomProgramDefault(Ratio, pngfile, centerWeight, (ImageProcessingTools::Exponent)exponent);
-		break;
-	case (int)Mode::Zoom:
-		std::cout << "function call not designed!" << std::endl;
-		exit(0);
-		break;
-
-	case (int)Mode::sharpen:
-	case (int)Mode::Sharpen:
-		if (argc > 3)
-		{
-			iss.clear();
-			iss.str(argv[3]);
-			iss >> Ratio;
-		}
-		ImageProcessingTools::sharpenProgram(Ratio, pngfile);
-		break;
-
-	case (int)Mode::cut:
-	case (int)Mode::Cut:
-		std::cout << "function call not designed!" << std::endl;
-		exit(0);
-		break;
-
-	default:
-		std::cout << "Error:unknown working mode.\n";
-		help();
-		exit(0);
-		break;
-	}
-
-	timer.TimerStop();
-
-	std::cout << "End processing . . .\n"
-		<< "Time used:" << timer.getTime() << "(second).\n" << std::endl;
-#else
-	float32_t Ratio = 2.5f;
-	float32_t centerWeight = 0.64f;
-	pngfile = "D:/pics/4K.png";
+	pngfile = "D:/pics/44K.png";
 	uint32_t exponent = (uint32_t)ImageProcessingTools::Exponent::one;
 
 	ImageProcessingTools::zoomProgramDefault(Ratio, pngfile, centerWeight, (ImageProcessingTools::Exponent)exponent);

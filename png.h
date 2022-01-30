@@ -4,11 +4,13 @@
 
 #include "lodepng.h"
 #include "AdaptString.h"
+#include "clockTimer.h"
 #include <cassert>
 #include <emmintrin.h>
 #include <filesystem>
 #include <iostream>
 #include <memory>
+#include <sstream>
 
 /*
 * Processors in different working modes need to be treated differently
@@ -19,7 +21,7 @@
 #endif
 
 #ifndef OPERATING_SYSTEM
-#define WINDOWS_SYSTEM_CPU_PARALLEL false
+#define WINDOWS_SYSTEM_CPU_PARALLEL true
 
 #if WINDOWS_SYSTEM_CPU_PARALLEL
 #define OPENMP_CPU false
@@ -41,21 +43,21 @@ using float32_t = float;
 using float64_t = double;
 
 // [min,max)
-#define Clamp(val,min,max)									            \
-{                                                                       \
-	assert(min < max && "wrong! min is larger than max in Clamp.");     \
-                                                                        \
-	if(val < min)                                                       \
-		val = min;                                                      \
-	else                                                                \
-	if(val > max)                                                       \
-		val = max;                                                      \
+#define Clamp(val,min,max)									                                      \
+{                                                                                                 \
+	assert((min) < (max) && "wrong! min is larger than max in Clamp.");                           \
+                                                                                                  \
+	if((val) < (min))                                                                             \
+		(val) = (min);                                                                            \
+	else                                                                                          \
+	if((val) > (max))                                                                             \
+		(val) = (max);                                                                            \
 }
 
-#define Lerp(val1,val2,weight)	                                                          \
-{								                                                          \
-	assert((0.0f <= weight&& weight<=1.0f) && "wrong! weight in lerp out of range[0,1].");\
-	val1 += weight * (val2 - val1);                                                       \
+#define Lerp(val1,val2,weight)	                                                                  \
+{								                                                                  \
+	assert((0.0f <= (weight) && (weight)<=1.0f) && "wrong! weight in lerp out of range[0,1].");   \
+	(val1) += (weight) * ((val2) - (val1));                                                       \
 }
 
 constexpr float maxColorPix = 255.0f;
@@ -200,26 +202,91 @@ public:
 		*this *= ColorPixTofloat;
 	}
 
-	RGBAColor_32f operator*(const float32_t& num)
+	RGBAColor_32f operator+(const float32_t& num) const
 	{
-		return RGBAColor_32f(_mm_mul_ps(float32X4, _mm_load1_ps(&num)));
+		return RGBAColor_32f(_mm_add_ps(this->float32X4, _mm_load1_ps(&num)));
+	}
+
+	RGBAColor_32f operator-(const float32_t& num) const
+	{
+		return RGBAColor_32f(_mm_sub_ps(this->float32X4, _mm_load1_ps(&num)));
+	}
+
+	RGBAColor_32f operator*(const float32_t& num) const
+	{
+		return RGBAColor_32f(_mm_mul_ps(this->float32X4, _mm_load1_ps(&num)));
+	}
+
+	RGBAColor_32f operator/(const float32_t& num) const
+	{
+		return RGBAColor_32f(_mm_div_ps(this->float32X4, _mm_load1_ps(&num)));
+	}
+
+	RGBAColor_32f& operator+=(const float32_t& num)
+	{
+		this->float32X4 = _mm_add_ps(this->float32X4, _mm_load1_ps(&num));
+		return *this;
+	}
+
+	RGBAColor_32f& operator-=(const float32_t& num)
+	{
+		this->float32X4 = _mm_sub_ps(this->float32X4, _mm_load1_ps(&num));
+		return *this;
 	}
 
 	RGBAColor_32f& operator*=(const float32_t& num)
 	{
-		this->float32X4 = _mm_mul_ps(float32X4, _mm_load1_ps(&num));
+		this->float32X4 = _mm_mul_ps(this->float32X4, _mm_load1_ps(&num));
 		return *this;
 	}
 
-	RGBAColor_32f operator+(const RGBAColor_32f& nextColor)
+	RGBAColor_32f& operator/=(const float32_t& num)
+	{
+		this->float32X4 = _mm_div_ps(this->float32X4, _mm_load1_ps(&num));
+		return *this;
+	}
+
+	RGBAColor_32f operator+(const RGBAColor_32f& nextColor) const
 	{
 		return RGBAColor_32f(_mm_add_ps(this->float32X4, nextColor.float32X4));
+	}
+
+	RGBAColor_32f operator-(const RGBAColor_32f& nextColor) const
+	{
+		return RGBAColor_32f(_mm_sub_ps(this->float32X4, nextColor.float32X4));
+	}
+
+	RGBAColor_32f operator*(const RGBAColor_32f& nextColor) const
+	{
+		return RGBAColor_32f(_mm_mul_ps(this->float32X4, nextColor.float32X4));
+	}
+
+	RGBAColor_32f operator/(const RGBAColor_32f& nextColor) const
+	{
+		return RGBAColor_32f(_mm_div_ps(this->float32X4, nextColor.float32X4));
 	}
 
 	RGBAColor_32f& operator+=(const RGBAColor_32f& nextColor)
 	{
 		this->float32X4 = _mm_add_ps(this->float32X4, nextColor.float32X4);
+		return *this;
+	}
 
+	RGBAColor_32f& operator-=(const RGBAColor_32f& nextColor)
+	{
+		this->float32X4 = _mm_sub_ps(this->float32X4, nextColor.float32X4);
+		return *this;
+	}
+
+	RGBAColor_32f& operator*=(const RGBAColor_32f& nextColor)
+	{
+		this->float32X4 = _mm_mul_ps(this->float32X4, nextColor.float32X4);
+		return *this;
+	}
+
+	RGBAColor_32f& operator/=(const RGBAColor_32f& nextColor)
+	{
+		this->float32X4 = _mm_div_ps(this->float32X4, nextColor.float32X4);
 		return *this;
 	}
 
@@ -244,6 +311,8 @@ using floatVec4 = RGBAColor_32f;
 class ImageProcessingTools
 {
 public:
+	static constexpr float32_t pi = 3.1415926f;
+
 	enum class Exponent:uint8_t
 	{
 		half = 1,
@@ -252,15 +321,87 @@ public:
 		quartet = 4,
 	};
 
+	enum class Mode :char
+	{
+		zoom = 'z',
+		Zoom = 'Z',
+		sharpen = 's',
+		Sharpen = 'S',
+		cut = 'c',
+		Cut = 'C',
+		toneMapping = 't',
+		ToneMapping = 'T',
+		unknown = '?'
+	};
+
 protected:
+	static inline float32_t basicFormula(const float32_t& a, const float32_t& x)
+	{
+		float32_t absX = fabsf(x);
+
+		if (absX <= 1.0f)
+		{
+			return (
+				(a + 2.0f) * (absX * absX * absX)
+				- (a + 3.0f) * (absX * absX)
+				+ 1.0f
+				);
+		}
+		else
+			if (absX < 2.0f)
+			{
+				return (
+					a * (absX * absX * absX)
+					- 5.0f * a * (absX * absX)
+					+ 8.0f * a * absX
+					- 4.0f * a);
+			}
+			else
+			{
+				return 0.0f;
+			}
+	}
+
+	static inline float32_t defaultFormula(const float32_t& x)
+	{
+		return sinf(pi * x) / (pi * x);
+	}
+
+	static inline float32_t CubicHermiteSplines(const float32_t& x)
+	{
+		return basicFormula(-0.5f, x);
+	}
+
+protected:
+	static inline void ACESToneMapping(RGBAColor_32f& color, const float32_t& adapted_lum)
+	{
+		static constexpr float32_t A = 2.51f;
+		static constexpr float32_t B = 0.03f;
+		static constexpr float32_t C = 2.43f;
+		static constexpr float32_t D = 0.59f;
+		static constexpr float32_t E = 0.14f;
+
+		const float32_t Alpha = color.A;
+
+		color *= adapted_lum;
+
+		color = (color * (color * A + B)) / (color * (color * C + D) + E);
+
+		color.A = Alpha;
+	}
+
 	static void weightEffectHalf(const float32_t& dx, const float32_t& dy, floatVec4& weightResult);
 	static void weightEffectOne(const float32_t& dx, const float32_t& dy, floatVec4& weightResult);
 	static void weightEffectSquare(const float32_t& dx, const float32_t& dy, floatVec4& weightResult);
 	static void weightEffectQuartet(const float32_t& dx, const float32_t& dy, floatVec4& weightResult);
 
 public:
+	static void help();
+	static void commandStartUps(int32_t argCount,STR argValues[]);
+
 	static void zoomProgramDefault(float32_t& zoomRatio, std::filesystem::path& pngfile,float32_t& CenterWeight,const Exponent& exponent = Exponent::one);
 	static void sharpenProgram(float32_t& sharpenRatio, std::filesystem::path& pngfile);
+	static void hdrToneMappingProgram(float32_t& lumRatio, std::filesystem::path& pngfile);
 	static void importFile(PngData& data, std::filesystem::path& pngfile);
 	static void exportFile(PngData& result, std::wstring& resultname);
 	static void exportFile(const byte* result,const uint32_t& width,const uint32_t& height, std::wstring& resultname);
@@ -270,6 +411,8 @@ public:
 		void (*WeightEffact)(const float32_t& dx, const float32_t& dy,floatVec4& weightResult) = ImageProcessingTools::weightEffectSquare);
 
 	static bool Sharpen3x3(PngData& input, PngData& result, const float32_t& strength = 1.0f);
+
+	static bool AecsHdrToneMapping(PngData& inputOutput,const float32_t& lumRatio = 1.0f);
 };
 
 
