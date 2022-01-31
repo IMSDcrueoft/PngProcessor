@@ -1,3 +1,27 @@
+/*
+PNG Processor Version 20220201
+
+Copyright (c) 2005-2022 IM&SD
+
+This software is provided 'as-is', without any express or implied
+warranty. In no event will the authors be held liable for any damages
+arising from the use of this software.
+
+Permission is granted to anyone to use this software for any purpose,
+including commercial applications, and to alter it and redistribute it
+freely, subject to the following restrictions:
+
+1. Do not distort the source of this software; you cannot Claiming that you wrote the original software.
+if you use this software In a product, the confirmation in the product documentation will be Appreciated but not required.
+
+2. Changed source versions must be clearly identified and must not be Mistaken for original software.
+
+3. This notice may not be deleted or changed from any source distribute.
+
+4. The LodePng header files and source files are modified from the project of GItHub Lode Vandevenne,
+so you should also comply with the requirements of its header declaration
+*/
+
 #include"png.h"
 
 bool ImageProcessingTools::Zoom_DefaultSampling4x4(PngData& input, PngData& result, const float32_t& magnification, const float32_t& CenterWeight,
@@ -28,8 +52,8 @@ bool ImageProcessingTools::Zoom_DefaultSampling4x4(PngData& input, PngData& resu
 #if WINDOWS_SYSTEM_CPU_PARALLEL
 	concurrency::parallel_for(0u, result.height, [&result, &input, &WeightEffact,&kernel, &scaleIndex](uint32_t Y){
 #else
-	uint32_t numberOfExecutionThreads = (std::thread::hardware_concurrency() + 1) >> 1;
-	numberOfExecutionThreads = (numberOfExecutionThreads > 6) ? numberOfExecutionThreads : 6;
+	CppParallelAccelerator accelerator;
+	std::queue<std::tuple<uint32_t,uint32_t>> param;
 
 	for (auto Y = 0u; Y < result.height; ++Y) {
 #endif
@@ -41,8 +65,10 @@ bool ImageProcessingTools::Zoom_DefaultSampling4x4(PngData& input, PngData& resu
 #if WINDOWS_SYSTEM_CPU_PARALLEL
 		auto Row = GetFloorIndex(Y);
 #else
-		auto CalculateARowOfPixels = [&result, &input, &WeightEffact, &GetFloorIndex, &kernel, &scaleIndex](uint32_t Row, uint32_t Y)
+		auto CalculateARowOfPixels = [&result, &input, &WeightEffact, &GetFloorIndex, &kernel, &scaleIndex](std::tuple<uint32_t,uint32_t> RowY)
 		{
+			auto& [Row, Y] = RowY;
+
 			if (Y >= result.height)return;
 #endif
 			for (auto X = 0u; X < result.width; ++X)
@@ -89,20 +115,14 @@ bool ImageProcessingTools::Zoom_DefaultSampling4x4(PngData& input, PngData& resu
 		};
 
 		// numberOfExecutionThreads threads
-		static std::vector<std::unique_ptr<std::thread>> allThreads(numberOfExecutionThreads);
-
-		for (auto i = 0; i < numberOfExecutionThreads; ++i)
+		for (auto i = 0; i < accelerator.GetNumThreads(); i++)
 		{
-			allThreads[i] = std::make_unique<std::thread>(
-				CalculateARowOfPixels,
-				GetFloorIndex(Y + i), Y + i);
+			param.push(std::make_tuple<uint32_t, uint32_t>(GetFloorIndex(Y + i), Y + i));
 		}
+		Y += (accelerator.GetNumThreads() - 1);
 
-		Y += (numberOfExecutionThreads - 1);
-
-		for (auto& ptr : allThreads)
-			ptr->join();
-
+		accelerator.Run(CalculateARowOfPixels, param);
+		accelerator.Join();
 	}
 #endif // !WINDOWS_SYSTEM_CPU_PARALLEL
 	return true;
@@ -131,8 +151,8 @@ bool ImageProcessingTools::Sharpen3x3(PngData& input, PngData& result,const floa
 #if WINDOWS_SYSTEM_CPU_PARALLEL
 	concurrency::parallel_for(0u, result.height,[&result, &input, &kernel](uint32_t Y){
 #else
-	uint32_t numberOfExecutionThreads = (std::thread::hardware_concurrency() + 1) >> 1;
-	numberOfExecutionThreads = (numberOfExecutionThreads > 6) ? numberOfExecutionThreads : 6;
+	CppParallelAccelerator accelerator;
+	std::queue<uint32_t> param;
 
 	for (auto Y = 0u; Y < result.height; ++Y) {
 
@@ -165,17 +185,15 @@ bool ImageProcessingTools::Sharpen3x3(PngData& input, PngData& result,const floa
 		};
 
 		// numberOfExecutionThreads threads
-		static std::vector<std::unique_ptr<std::thread>> allThreads(numberOfExecutionThreads);
-
-		for (auto i = 0; i < numberOfExecutionThreads; ++i)
+		for (auto i = 0; i < accelerator.GetNumThreads(); i++)
 		{
-			allThreads[i] = std::make_unique<std::thread>(CalculateARowOfPixels,Y + i);
+			param.push(Y + i);
 		}
+		Y += (accelerator.GetNumThreads() - 1);
 
-		Y += (numberOfExecutionThreads - 1);
+		accelerator.Run(CalculateARowOfPixels, param);
+		accelerator.Join();
 
-		for (auto& ptr : allThreads)
-			ptr->join();
 		}
 #endif // !WINDOWS_SYSTEM_CPU_PARALLEL	
 	return true;
@@ -192,8 +210,8 @@ bool ImageProcessingTools::AecsHdrToneMapping(PngData& inputOutput, const float3
 #if WINDOWS_SYSTEM_CPU_PARALLEL
 	concurrency::parallel_for(0u, inputOutput.height, [&inputOutput, &lumRatio](uint32_t Y) {
 #else
-	uint32_t numberOfExecutionThreads = (std::thread::hardware_concurrency() + 1) >> 1;
-	numberOfExecutionThreads = (numberOfExecutionThreads > 6) ? numberOfExecutionThreads : 6;
+	CppParallelAccelerator accelerator;
+	std::queue<uint32_t> param;
 
 	for (auto Y = 0u; Y < inputOutput.height; ++Y) {
 
@@ -213,17 +231,55 @@ bool ImageProcessingTools::AecsHdrToneMapping(PngData& inputOutput, const float3
 		};
 
 		// numberOfExecutionThreads threads
-		static std::vector<std::unique_ptr<std::thread>> allThreads(numberOfExecutionThreads);
-
-		for (auto i = 0; i < numberOfExecutionThreads; ++i)
+		for (auto i = 0; i < accelerator.GetNumThreads(); i++)
 		{
-			allThreads[i] = std::make_unique<std::thread>(CalculateARowOfPixels, Y + i);
+			param.push(Y + i);
 		}
+		Y += (accelerator.GetNumThreads() - 1);
 
-		Y += (numberOfExecutionThreads - 1);
+		accelerator.Run(CalculateARowOfPixels, param);
+		accelerator.Join();
+	}
+#endif
+	return true;
+}
 
-		for (auto& ptr : allThreads)
-			ptr->join();
+bool ImageProcessingTools::Grayscale(PngData& inputOutput)
+{
+	if (inputOutput.getRGBA_uint8().size() == 0)//Handle it well, otherwise there will be problems in parallel
+		return false;
+
+	//not need this time
+	inputOutput.clearImage();
+
+#if WINDOWS_SYSTEM_CPU_PARALLEL
+	concurrency::parallel_for(0u, inputOutput.height, [&inputOutput](uint32_t Y) {
+#else
+	CppParallelAccelerator accelerator;
+	std::queue<uint32_t> param;
+
+	for (auto Y = 0u; Y < inputOutput.height; ++Y) {
+
+		auto CalculateARowOfPixels = [&inputOutput](uint32_t Y) {
+#endif
+			for (auto X = 0u; X < inputOutput.width; ++X)
+			{
+				ImageProcessingTools::GrayColor(inputOutput(X, Y));
+			}
+
+#if WINDOWS_SYSTEM_CPU_PARALLEL
+		});
+#else
+};
+		// numberOfExecutionThreads threads
+		for (auto i = 0; i < accelerator.GetNumThreads(); i++)
+		{
+			param.push(Y + i);
+		}
+		Y += (accelerator.GetNumThreads() - 1);
+
+		accelerator.Run(CalculateARowOfPixels, param);
+		accelerator.Join();
 	}
 #endif
 	return true;
@@ -243,7 +299,7 @@ void ImageProcessingTools::importFile(PngData& data, std::filesystem::path& pngf
 	}
 }
 
-void ImageProcessingTools::exportFile(PngData& result, std::wstring& resultname)
+void ImageProcessingTools::exportFile(PngData& result, std::wstring& resultname,const LodePNGColorType& colorType,const uint32_t& bitdepth)
 {
 	auto path = AdaptString::toString(resultname);
 
@@ -254,7 +310,7 @@ void ImageProcessingTools::exportFile(PngData& result, std::wstring& resultname)
 	}
 	else
 	{
-		uint32_t error = lodepng::encode(path, result.image, result.width, result.height);
+		uint32_t error = lodepng::encode(path, result.image, result.width, result.height,colorType,bitdepth);
 
 		if (error)
 		{
@@ -266,7 +322,7 @@ void ImageProcessingTools::exportFile(PngData& result, std::wstring& resultname)
 	}
 }
 
-void ImageProcessingTools::exportFile(const byte* result, const uint32_t& width, const uint32_t& height, std::wstring& resultname)
+void ImageProcessingTools::exportFile(const byte* result, const uint32_t& width, const uint32_t& height, std::wstring& resultname, const LodePNGColorType& colorType, const uint32_t& bitdepth)
 {
 	auto path = AdaptString::toString(resultname);
 
@@ -277,7 +333,7 @@ void ImageProcessingTools::exportFile(const byte* result, const uint32_t& width,
 	}
 	else
 	{
-		uint32_t error = lodepng::encode(path, result, width, height);
+		uint32_t error = lodepng::encode(path, result, width, height, colorType, bitdepth);
 
 		if (error)
 		{
@@ -289,74 +345,6 @@ void ImageProcessingTools::exportFile(const byte* result, const uint32_t& width,
 	}
 }
 
-void ImageProcessingTools::weightEffectHalf(const float32_t& dx, const float32_t& dy, floatVec4& weightResult)
-{
-	float32_t sum = 0.0f;
-
-	float32_t dx2 = dx * dx;
-	float32_t dy2 = dy * dy;
-	float32_t _dx2 = (1.0f - dx) * (1.0f - dx);
-	float32_t _dy2 = (1.0f - dy) * (1.0f - dy);
-
-	sum += weightResult.X = std::sqrtf(std::sqrtf(_dx2 + _dy2));
-	sum += weightResult.W = std::sqrtf(std::sqrtf(dx2 + dy2));
-	sum += weightResult.Y = std::sqrtf(std::sqrtf(dx2 + _dy2));
-	sum += weightResult.Z = std::sqrtf(std::sqrtf(_dx2 + dy2));
-
-	weightResult *= (4.0f / sum);
-}
-
-void ImageProcessingTools::weightEffectOne(const float32_t& dx, const float32_t& dy, floatVec4& weightResult)
-{
-	float32_t sum = 0.0f;
-
-	float32_t dx2 = dx * dx;
-	float32_t dy2 = dy * dy;
-	float32_t _dx2 = (1.0f - dx) * (1.0f - dx);
-	float32_t _dy2 = (1.0f - dy) * (1.0f - dy);
-
-	sum += weightResult.X = std::sqrtf(_dx2 + _dy2);
-	sum += weightResult.W = std::sqrtf(dx2 + dy2);
-	sum += weightResult.Y = std::sqrtf(dx2 + _dy2);
-	sum += weightResult.Z = std::sqrtf(_dx2 + dy2);
-
-	weightResult *= (4.0f / sum);
-}
-
-void ImageProcessingTools::weightEffectSquare(const float32_t& dx, const float32_t& dy, floatVec4& weightResult)
-{
-	float32_t sum = 0.0f;
-
-	float32_t dx2 = dx * dx;
-	float32_t dy2 = dy * dy;
-	float32_t _dx2 = (1.0f - dx) * (1.0f - dx);
-	float32_t _dy2 = (1.0f - dy) * (1.0f - dy);
-
-	sum += weightResult.X = _dx2 + _dy2;
-	sum += weightResult.W = dx2 + dy2;
-	sum += weightResult.Y = dx2 + _dy2;
-	sum += weightResult.Z = _dx2 + dy2;
-
-	weightResult *= (4.0f / sum);
-}
-
-void ImageProcessingTools::weightEffectQuartet(const float32_t& dx, const float32_t& dy, floatVec4& weightResult)
-{
-	float32_t sum = 0.0f;
-
-	float32_t dx2 = dx * dx;
-	float32_t dy2 = dy * dy;
-	float32_t _dx2 = (1.0f - dx) * (1.0f - dx);
-	float32_t _dy2 = (1.0f - dy) * (1.0f - dy);
-
-	sum += weightResult.X = (_dx2 + _dy2) * (_dx2 + _dy2);
-	sum += weightResult.W = (dx2 + dy2) * (dx2 + dy2);
-	sum += weightResult.Y = (dx2 + _dy2) * (dx2 + _dy2);
-	sum += weightResult.Z = (_dx2 + dy2) * (_dx2 + dy2);
-
-	weightResult *= (4.0f / sum);
-}
-
 void ImageProcessingTools::help()
 {
 	std::cout << "Check Help Info.\n\n"
@@ -364,14 +352,17 @@ void ImageProcessingTools::help()
 		<< "Startup parameters-->\n"
 		<< "[default zoom]: z\n"
 		<< "[bicubic zoom]: Z [Feature not currently supported]\n"
-		<< "[sharpen]: s\n"
-		<< "[tone mapping]:t\n"
-		<< "[cut]: c [Feature not currently supported]\n\n"
+		<< "[sharpen]: s or S\n"
+		<< "[tone mapping]:t or T\n"
+		<< "[gray scale]:g or G\n"
+		<< "[cut]: c or C [Feature not currently supported]\n\n"
 		<< "Input Sample-->\n"
 		<< "./exe filename.png z[default zoom] 1.0[zoom ratio:has default value] 0.5[center weight:has default value] 2[Exponent:has default value]\n"
-		<< "[default zoom]\n[zoom ratio(from 0.001 to 32.0)]\n[center weight(from 0.25 to 13.0,0.25:MSAA,1.0:bilinear,>1:sharp)]\n[Exponent(from 1 to 4:0.5,1.0,2.0,4.0)]\n\n"
+		<< "[default zoom]\n[zoom ratio(from 0.001 to 32.0)]\n[center weight(from 0.25 to 13.0,0.25:similar to MSAAx16,1.0:similar to bilinear,>1:sharp)]\n[Exponent(from 1 to 4:0.5,1.0,2.0,4.0)]\n\n"
 		<< "./exe filename.png t[tone mapping] 2.0[lumming ratio:has default value]\n"
-		<< "[tone mapping]\n[lumming ratio(from 0.1 to 16.0)]\n"
+		<< "[tone mapping]\n[lumming ratio(from 0.1 to 16.0)]\n\n"
+		<< "./exe filename.png g[gray scale]\n"
+		<< "[gray scale]\n\n"
 		<< "./exe filename.png s[sharpen] 4.0[sharpen ratio:has default value]\n"
 		<< "[sharpen]\n[sharpen ratio(from 0.2 to 16.0)]\n\n"
 		<< "./exe filename.png c[cut] 1024[Horizontal size] 1024[Vertical size]\n" << std::endl;
@@ -477,6 +468,12 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 		}
 		ImageProcessingTools::hdrToneMappingProgram(Ratio, pngfile);
 		break;
+
+	case (int)Mode::grayScale:
+	case (int)Mode::GrayScale:
+		ImageProcessingTools::grayColorProgram(pngfile);
+		break;
+
 	default:
 		std::cout << "Error:unknown working mode.\n";
 		help();
@@ -554,7 +551,7 @@ void ImageProcessingTools::zoomProgramDefault(float32_t& zoomRatio, std::filesys
 	}
 	else
 	{
-		std::cout << "Something wrong in sampling." << std::endl;
+		std::cout << "Something wrong in convert." << std::endl;
 		exit(0);
 	}
 }
@@ -593,7 +590,7 @@ void ImageProcessingTools::sharpenProgram(float32_t& sharpenRatio, std::filesyst
 	}
 	else
 	{
-		std::cout << "Something wrong in sampling." << std::endl;
+		std::cout << "Something wrong in convert." << std::endl;
 		exit(0);
 	}
 }
@@ -629,7 +626,39 @@ void ImageProcessingTools::hdrToneMappingProgram(float32_t& lumRatio, std::files
 	}
 	else
 	{
-		std::cout << "Something wrong in sampling." << std::endl;
+		std::cout << "Something wrong in convert." << std::endl;
+		exit(0);
+	}
+}
+
+void ImageProcessingTools::grayColorProgram(std::filesystem::path& pngfile)
+{
+	std::cout << "Grayscale:\n"
+		<< "Start processing . . ." << std::endl;
+
+	PngData image;
+	importFile(image, pngfile);
+
+	if (ImageProcessingTools::Grayscale(image))
+	{
+		std::wstring resultname;
+		resultname.append(pngfile.parent_path()).append(L"\\").append(pngfile.stem())
+			.append(L"_gray")
+			.append(pngfile.extension());
+
+#if LITTLE_ENDIAN
+		exportFile(reinterpret_cast<byte*>(image.getRGBA_uint8().data()), image.width, image.height, resultname);
+#else
+		//load result into stream to save to file
+		image.loadRGBAtoByteStream();
+		image.clearRGBA_uint8();
+
+		exportFile(image, resultname);
+#endif
+	}
+	else
+	{
+		std::cout << "Something wrong in convert." << std::endl;
 		exit(0);
 	}
 }

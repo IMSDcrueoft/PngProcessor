@@ -24,7 +24,7 @@ inline AdaptString::STR AdaptString::toSTR(CWSTR cwstr, const size_t& size)
 
 	size_t converted = 0;
 
-	size_t error = wcstombs_s(&converted, str, requireSize + 1, cwstr, requireSize);//std::wcstombs(str, cwstr, requireSize);
+	size_t error = wcstombs_s(&converted, str, requireSize + 1, cwstr, requireSize);
 	assert(error != -1 && "string convert error.");
 	return str;
 }

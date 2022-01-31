@@ -47,8 +47,8 @@ freely, subject to the following restrictions:
 //	//the pixels are now in the vector "image", 4 bytes per pixel, ordered RGBARGBA..., use it as texture, draw it, ...
 //}
 //
-////Example 2
-////Load PNG file from disk to memory first, then decode to raw pixels in memory.
+//Example 2
+//Load PNG file from disk to memory first, then decode to raw pixels in memory.
 //void decodeTwoSteps(const char* filename) {
 //	std::vector<unsigned char> png;
 //	std::vector<unsigned char> image; //the raw pixels
@@ -81,7 +81,7 @@ freely, subject to the following restrictions:
 //	//the pixels are now in the vector "image", 4 bytes per pixel, ordered RGBARGBA..., use it as texture, draw it, ...
 //	//State state contains extra information about the PNG such as text chunks, ...
 //}
-#define DEBUG true
+#define DEBUG false
 
 int main(int argc, char* argv[])
 {
@@ -92,12 +92,14 @@ int main(int argc, char* argv[])
 	clockTimer timer;
 	timer.TimerStart();
 
-	float32_t Ratio = 1.075f;
-	float32_t centerWeight = 0.64f;
-	pngfile = "D:/pics/44K.png";
-	uint32_t exponent = (uint32_t)ImageProcessingTools::Exponent::one;
+	//float32_t Ratio = 1.075f;
+	//float32_t centerWeight = 0.64f;
+	pngfile = "D:/pics/4K.png";
+	//uint32_t exponent = (uint32_t)ImageProcessingTools::Exponent::one;
 
-	ImageProcessingTools::zoomProgramDefault(Ratio, pngfile, centerWeight, (ImageProcessingTools::Exponent)exponent);
+	//ImageProcessingTools::zoomProgramDefault(Ratio, pngfile, centerWeight, (ImageProcessingTools::Exponent)exponent);
+	ImageProcessingTools::grayColorProgram(pngfile);
+
 	timer.TimerStop();
 	std::cout << "Time use:" << timer.getTime();
 #endif

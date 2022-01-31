@@ -161,11 +161,11 @@
   <ItemGroup>
     <ClInclude Include="AdaptString.h" />
     <ClInclude Include="clockTimer.h" />
+    <ClInclude Include="CppParallelAccelerator.h" />
     <ClInclude Include="lodepng.h" />
     <ClInclude Include="png.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="AdaptString.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="lodepng.cpp" />
     <ClCompile Include="png.cpp" />

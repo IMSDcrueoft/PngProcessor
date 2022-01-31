@@ -12,12 +12,12 @@ class clockTimer
 public:
 	inline void TimerStart()
 	{
-		start = clock();		//事件开始计时
+		start = clock();
 	}
 
 	inline void TimerStop()
 	{
-		end = clock();			//事件结束用时
+		end = clock();
 	}
 
 	double& getTime()
