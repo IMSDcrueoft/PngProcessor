@@ -25,13 +25,17 @@ freely, subject to the following restrictions:
 /*
 Notice:
 This header file has been comprehensive modified to adapt to the use of the C++ advanced version language
-of the project, and can no longer be compiled using the C standard.
+of the project, and can no longer be compiled using the C standard,and must be compiled for 64-bit.
 
 20220126 , Modified by IM&SD
 */
 
 #ifndef LODEPNG_H
 #define LODEPNG_H
+
+#ifndef IMSD_SOURCE_CODE_MODIFICATION
+#define IMSD_SOURCE_CODE_MODIFICATION true
+#endif // !IMSD_SOURCE_CODE_MODIFICATION
 
 #include <string.h> /*for size_t*/
 

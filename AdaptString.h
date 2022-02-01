@@ -19,12 +19,31 @@ public:
 
 inline AdaptString::STR AdaptString::toSTR(CWSTR cwstr, const size_t& size)
 {
-	size_t requireSize = sizeof(wchar_t) * size;
+	size_t requireSize = 4 * size;
+	/*
+	字节数 : 1;编码：GB2312
+	字节数 : 1;编码：GBK
+	字节数 : 1;编码：GB18030
+	字节数 : 1;编码：ISO-8859-1
+	字节数 : 1;编码：UTF-8
+	字节数 : 4;编码：UTF-16
+	字节数 : 2;编码：UTF-16BE
+	字节数 : 2;编码：UTF-16LE
+	中文汉字：
+	字节数 : 2;编码：GB2312
+	字节数 : 2;编码：GBK
+	字节数 : 2;编码：GB18030
+	字节数 : 1;编码：ISO-8859-1
+	字节数 : 3;编码：UTF-8
+	字节数 : 4;编码：UTF-16
+	字节数 : 2;编码：UTF-16BE
+	字节数 : 2;编码：UTF-16LE
+	*/
 	STR str = static_cast<STR>(operator new(requireSize + sizeof(char)));
 
 	size_t converted = 0;
 
-	size_t error = wcstombs_s(&converted, str, requireSize + 1, cwstr, requireSize);
+	size_t error = wcstombs_s(&converted, str, requireSize + sizeof(char), cwstr, requireSize);
 	assert(error != -1 && "string convert error.");
 	return str;
 }

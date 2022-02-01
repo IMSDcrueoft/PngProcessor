@@ -54,9 +54,10 @@ so you should also comply with the requirements of its header declaration
 
 #if WINDOWS_SYSTEM_CPU_PARALLEL
 #include<ppl.h>
-#else
-#include<thread>
 #endif //PARALLELISM
+
+#include<thread>
+
 
 /*
 // [min,max)
@@ -103,6 +104,8 @@ auto Lerp = [](auto& val1, const auto& val2, const auto& weight)
 	val1 += weight * (val2-val1);
 };
 
+#define _mm_mul_add_ps(a,b,c) _mm_add_ps(_mm_mul_ps((a),(b)),(c))
+#define _mm_fma_ps(a,b,c) _mm_mul_add_ps((a),(b),(c))
 /*
 * R8G8B8A8 color with uint8_t
 */
@@ -124,6 +127,7 @@ struct alignas(4) RGBAColor_8i
 	RGBAColor_8i() = default;
 	RGBAColor_8i(byte* ptr);
 	RGBAColor_8i(unknown_pointer ptr);
+	RGBAColor_8i(const uint8_t& color);
 	RGBAColor_8i(const uint8_t& R, const uint8_t& G, const uint8_t& B, const uint8_t& A = 0xFF);
 
 	RGBAColor_8i& operator=(const uint32_t& rgba);
@@ -190,6 +194,7 @@ public:
 	RGBAColor_32f(const float32_t& val);
 	RGBAColor_32f(const float32_t& r, const float32_t& g, const float32_t& b, const float32_t& a = 1.0f);
 	RGBAColor_32f(const RGBAColor_8i& color);
+	RGBAColor_32f(const RGBAColor_8i& color,const float32_t& multNum);
 
 	RGBAColor_32f operator+(const float32_t& num) const;
 	RGBAColor_32f operator-(const float32_t& num) const;
@@ -212,6 +217,8 @@ public:
 	RGBAColor_32f& operator/=(const RGBAColor_32f& nextColor);
 
 	RGBAColor_8i toRGBAColor_8i();
+
+	void FMA(RGBAColor_32f& addResult, const RGBAColor_32f& mul1, const RGBAColor_32f& mul2);
 };
 using floatVec4 = RGBAColor_32f;
 
@@ -239,13 +246,21 @@ public:
 		ToneMapping = 'T',
 		grayScale = 'g',
 		GrayScale = 'G',
+		reverseColor = 'r',
+		ReverseColor = 'R',
+		vividness = 'v',
+		Vividness = 'V',
+		binarization = 'b',
+		Binarization = 'B',
 		unknown = '?'
 	};
 
 protected:
-	static void GrayColor(RGBAColor_8i& color);
-	static void VividnessAdjustment(RGBAColor_32f& color, float32_t changeMagnification);
-	static void ACESToneMapping(RGBAColor_32f& color, const float32_t& adapted_lum);
+	static void GrayColor(const RGBAColor_8i& color,byte& result);
+	static void BinarizationColor(const RGBAColor_8i& color,const float32_t& threshold,byte& result);
+	static void ReverseColor(RGBAColor_8i& color);
+	static void VividnessAdjustmentColor(RGBAColor_32f& color,const float32_t& changeMagnification);
+	static void ACESToneMappingColor(RGBAColor_32f& color, const float32_t& adapted_lum);
 
 protected:
 	static float32_t approximateFormula(const float32_t& a, const float32_t& x);
@@ -264,9 +279,12 @@ public:
 
 	static void zoomProgramDefault(float32_t& zoomRatio, std::filesystem::path& pngfile,float32_t& CenterWeight,const Exponent& exponent = Exponent::one);
 	static void sharpenProgram(float32_t& sharpenRatio, std::filesystem::path& pngfile);
-	static void hdrToneMappingProgram(float32_t& lumRatio, std::filesystem::path& pngfile);
+	static void hdrToneMappingColorProgram(float32_t& lumRatio, std::filesystem::path& pngfile);
 	static void reverseColorProgram(std::filesystem::path& pngfile);
 	static void grayColorProgram(std::filesystem::path& pngfile);
+	static void channelGrayColorProgram(std::filesystem::path& pngfile);
+	static void VividnessAdjustmentColorProgram(float32_t& VividRatio,std::filesystem::path& pngfile);
+	static void BinarizationColorProgram(float32_t& threshold, std::filesystem::path& pngfile);
 
 	//The following three methods rely on lodepng
 	static void importFile(PngData& data, std::filesystem::path& pngfile);
@@ -283,7 +301,10 @@ public:
 	static bool Sharpen3x3(PngData& input, PngData& result, const float32_t& strength = 1.0f);
 	static bool AecsHdrToneMapping(PngData& inputOutput,const float32_t& lumRatio = 1.0f);
 	static bool ReverseColorImage(PngData& inputOutput);
-	static bool Grayscale(PngData& inputOutput);
+	static bool Grayscale(PngData& input, PngData& result);
+	static bool ChannelGrayScale(PngData& input, PngData& resultR, PngData& resultG, PngData& resultB);
+	static bool VividnessAdjustment(PngData& inputOutput, const float32_t& vividRatio = 0.2f);
+	static bool Binarization(PngData& input, PngData& result, const float32_t& threshold = 0.5f);
 };
 
 
@@ -305,6 +326,14 @@ inline RGBAColor_8i::RGBAColor_8i(byte* ptr)
 inline RGBAColor_8i::RGBAColor_8i(unknown_pointer ptr)
 {
 	new (this) RGBAColor_8i(static_cast<byte*>(ptr));
+}
+
+inline RGBAColor_8i::RGBAColor_8i(const uint8_t& color)
+{
+	this->R = color;
+	this->G = color;
+	this->B = color;
+	this->A = 0xFF;
 }
 
 inline RGBAColor_8i::RGBAColor_8i(const uint8_t& R, const uint8_t& G, const uint8_t& B, const uint8_t& A)
@@ -360,9 +389,12 @@ inline RGBAColor_32f::RGBAColor_32f(const float32_t& r, const float32_t& g, cons
 
 inline RGBAColor_32f::RGBAColor_32f(const RGBAColor_8i& color)
 {
-	new (this) RGBAColor_32f(color.R, color.G, color.B, color.A);
+	float32X4 = _mm_mul_ps(_mm_set_ps(color.R, color.G, color.B, color.A), _mm_set1_ps(ColorPixTofloat));
+}
 
-	*this *= ColorPixTofloat;
+inline RGBAColor_32f::RGBAColor_32f(const RGBAColor_8i& color, const float32_t& multNum)
+{
+	this->float32X4 = _mm_mul_ps(_mm_mul_ps(_mm_set_ps(color.R, color.G, color.B, color.A), _mm_set1_ps(ColorPixTofloat)),_mm_set1_ps(multNum));
 }
 
 inline RGBAColor_32f RGBAColor_32f::operator+(const float32_t& num) const
@@ -469,6 +501,11 @@ inline RGBAColor_8i RGBAColor_32f::toRGBAColor_8i()
 		static_cast<uint8_t>(result.A));
 }
 
+inline void RGBAColor_32f::FMA(RGBAColor_32f& addResult, const RGBAColor_32f& mul1, const RGBAColor_32f& mul2)
+{
+	addResult.float32X4 = _mm_fma_ps(mul1.float32X4, mul2.float32X4, addResult.float32X4);
+}
+
 inline PngData::PngData(std::vector<RGBAColor_8i>& image_in,const uint32_t& width,const uint32_t& height)
 {
 	this->width = width;
@@ -567,21 +604,29 @@ inline void PngData::clear()
 	clearRGBA_uint8();
 }
 
-inline void ImageProcessingTools::GrayColor(RGBAColor_8i& color)
+inline void ImageProcessingTools::GrayColor(const RGBAColor_8i& color, byte& result)
 {
-	uint16_t avg = (static_cast<uint16_t>(color.R) + color.G + color.B) / 3;
+	float32_t sum = color.R + color.G + color.B;
 
-	color.R = static_cast<uint8_t>(avg);
-	color.G = static_cast<uint8_t>(avg);
-	color.B = static_cast<uint8_t>(avg);
+	result = sum / 3;
 }
 
-inline void ImageProcessingTools::VividnessAdjustment(RGBAColor_32f& color, float32_t changeMagnification)
+inline void ImageProcessingTools::BinarizationColor(const RGBAColor_8i& color, const float32_t& threshold, byte& result)
+{
+	float32_t sum = color.R + color.G + color.B;
+
+	result = (sum >= threshold * maxColorPix * 3.0f) ? 0xFF : 0;
+}
+
+inline void ImageProcessingTools::ReverseColor(RGBAColor_8i& color)
+{
+	color = ~color;
+}
+
+inline void ImageProcessingTools::VividnessAdjustmentColor(RGBAColor_32f& color,const float32_t& changeMagnification)
 {
 	//worthless calculation
 	if (fabsf(changeMagnification) < 0.001f) return;
-
-	Clamp(changeMagnification, -1.0f, 1.0f);
 
 	float32_t Alpha = color.A;
 
@@ -596,7 +641,7 @@ inline void ImageProcessingTools::VividnessAdjustment(RGBAColor_32f& color, floa
 	color.A = Alpha;
 }
 
-inline void ImageProcessingTools::ACESToneMapping(RGBAColor_32f& color, const float32_t& adapted_lum)
+inline void ImageProcessingTools::ACESToneMappingColor(RGBAColor_32f& color, const float32_t& adapted_lum)
 {
 	static constexpr float32_t A = 2.51f;
 	static constexpr float32_t B = 0.03f;

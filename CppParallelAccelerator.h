@@ -16,7 +16,7 @@ public:
 	CppParallelAccelerator(const uint16_t& numThreads);
 
 	void SetNumThreads(const uint16_t& numThreads);
-	uint32_t GetNumThreads();
+	uint16_t GetNumThreads();
 
 	template<typename Event, typename startParameterQueue>
 	void Run(Event& e, startParameterQueue& queue);
@@ -49,7 +49,7 @@ inline void CppParallelAccelerator::SetNumThreads(const uint16_t& numThreads)
 	allThreads.resize(numThreads);
 }
 
-inline uint32_t CppParallelAccelerator::GetNumThreads()
+inline uint16_t CppParallelAccelerator::GetNumThreads()
 {
 	return allThreads.size();
 }

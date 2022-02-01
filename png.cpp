@@ -41,7 +41,7 @@ bool ImageProcessingTools::Zoom_DefaultSampling4x4(PngData& input, PngData& resu
 	float32_t center = CenterWeight / 4.0f;
 	float32_t outer = (1.0f - CenterWeight) / 12.0f;
 
-	const float32_t kernel[4][4] =
+	const float32_t kernel[4][4]
 	{
 		{outer,outer,outer,outer},
 		{outer,center,center,outer},
@@ -53,7 +53,7 @@ bool ImageProcessingTools::Zoom_DefaultSampling4x4(PngData& input, PngData& resu
 	concurrency::parallel_for(0u, result.height, [&result, &input, &WeightEffact,&kernel, &scaleIndex](uint32_t Y){
 #else
 	CppParallelAccelerator accelerator;
-	std::queue<std::tuple<uint32_t,uint32_t>> param;
+	std::queue<uint32_t> param;
 
 	for (auto Y = 0u; Y < result.height; ++Y) {
 #endif
@@ -62,15 +62,13 @@ bool ImageProcessingTools::Zoom_DefaultSampling4x4(PngData& input, PngData& resu
 			return static_cast<int32_t>(floorf(index * scaleIndex));
 		};
 
-#if WINDOWS_SYSTEM_CPU_PARALLEL
-		auto Row = GetFloorIndex(Y);
-#else
-		auto CalculateARowOfPixels = [&result, &input, &WeightEffact, &GetFloorIndex, &kernel, &scaleIndex](std::tuple<uint32_t,uint32_t> RowY)
+#if !WINDOWS_SYSTEM_CPU_PARALLEL
+		auto CalculateARowOfPixels = [&result, &input, &WeightEffact, &GetFloorIndex, &kernel, &scaleIndex](uint32_t Y)
 		{
-			auto& [Row, Y] = RowY;
-
 			if (Y >= result.height)return;
 #endif
+			auto Row = GetFloorIndex(Y);
+
 			for (auto X = 0u; X < result.width; ++X)
 			{
 
@@ -83,31 +81,43 @@ bool ImageProcessingTools::Zoom_DefaultSampling4x4(PngData& input, PngData& resu
 				floatVec4 weight;
 				WeightEffact(dx, dy, weight);
 
-				RGBAColor_32f rgba_f(0.0f, 0.0f, 0.0f, 0.0f);
+				RGBAColor_32f rgba_f1(0.0f, 0.0f, 0.0f, 0.0f);
+				RGBAColor_32f rgba_f2(0.0f, 0.0f, 0.0f, 0.0f);
+				RGBAColor_32f rgba_f3(0.0f, 0.0f, 0.0f, 0.0f);
+				RGBAColor_32f rgba_f4(0.0f, 0.0f, 0.0f, 0.0f);
 
 				//Unrolling loops to enhance performance
 
-				rgba_f += RGBAColor_32f(input(Column + (-1), Row + (-1))) * (kernel[0][0] * weight.X);
-				rgba_f += RGBAColor_32f(input(Column + 0, Row + (-1))) * (kernel[0][1] * weight.X);
-				rgba_f += RGBAColor_32f(input(Column + 1, Row + (-1))) * (kernel[0][2] * weight.Y);
-				rgba_f += RGBAColor_32f(input(Column + 2, Row + (-1))) * (kernel[0][3] * weight.Y);
+				rgba_f1 += RGBAColor_32f(input(Column + (-1), Row + (-1)), kernel[0][0]);
+				rgba_f1 += RGBAColor_32f(input(Column + 0   , Row + (-1)), kernel[0][1]);
+				rgba_f1 += RGBAColor_32f(input(Column + (-1), Row + 0)	 , kernel[1][0]);
+				rgba_f1 += RGBAColor_32f(input(Column + 0   , Row + 0)	 , kernel[1][1]);
 
-				rgba_f += RGBAColor_32f(input(Column + (-1), Row + 0)) * (kernel[1][0] * weight.X);
-				rgba_f += RGBAColor_32f(input(Column + 0, Row + 0)) * (kernel[1][1] * weight.X);
-				rgba_f += RGBAColor_32f(input(Column + 1, Row + 0)) * (kernel[1][2] * weight.Y);
-				rgba_f += RGBAColor_32f(input(Column + 2, Row + 0)) * (kernel[1][3] * weight.Y);
+				rgba_f2 += RGBAColor_32f(input(Column + 1   , Row + (-1)), kernel[0][2]);
+				rgba_f2 += RGBAColor_32f(input(Column + 2   , Row + (-1)), kernel[0][3]);
+				rgba_f2 += RGBAColor_32f(input(Column + 1   , Row + 0)	 , kernel[1][2]);
+				rgba_f2 += RGBAColor_32f(input(Column + 2   , Row + 0)	 , kernel[1][3]);
 
-				rgba_f += RGBAColor_32f(input(Column + (-1), Row + 1)) * (kernel[2][0] * weight.Z);
-				rgba_f += RGBAColor_32f(input(Column + 0, Row + 1)) * (kernel[2][1] * weight.Z);
-				rgba_f += RGBAColor_32f(input(Column + 1, Row + 1)) * (kernel[2][2] * weight.W);
-				rgba_f += RGBAColor_32f(input(Column + 2, Row + 1)) * (kernel[2][3] * weight.W);
+				rgba_f3 += RGBAColor_32f(input(Column + (-1), Row + 1), kernel[2][0]);
+				rgba_f3 += RGBAColor_32f(input(Column + 0   , Row + 1), kernel[2][1]);
+				rgba_f3 += RGBAColor_32f(input(Column + (-1), Row + 2), kernel[3][0]);
+				rgba_f3 += RGBAColor_32f(input(Column + 0   , Row + 2), kernel[3][1]);
 
-				rgba_f += RGBAColor_32f(input(Column + (-1), Row + 2)) * (kernel[3][0] * weight.Z);
-				rgba_f += RGBAColor_32f(input(Column + 0, Row + 2)) * (kernel[3][1] * weight.Z);
-				rgba_f += RGBAColor_32f(input(Column + 1, Row + 2)) * (kernel[3][2] * weight.W);
-				rgba_f += RGBAColor_32f(input(Column + 2, Row + 2)) * (kernel[3][3] * weight.W);
+				rgba_f4 += RGBAColor_32f(input(Column + 1   , Row + 1), kernel[2][2]);
+				rgba_f4 += RGBAColor_32f(input(Column + 2   , Row + 1), kernel[2][3]);
+				rgba_f4 += RGBAColor_32f(input(Column + 1   , Row + 2), kernel[3][2]);
+				rgba_f4 += RGBAColor_32f(input(Column + 2   , Row + 2), kernel[3][3]);
 
-				result(X, Y) = rgba_f.toRGBAColor_8i();
+				rgba_f1 *= weight.X;
+				rgba_f2 *= weight.Y;
+				rgba_f3 *= weight.Z;
+				rgba_f4 *= weight.W;
+
+				rgba_f1 += rgba_f2;
+				rgba_f1 += rgba_f3;
+				rgba_f1 += rgba_f4;
+
+				result(X, Y) = rgba_f1.toRGBAColor_8i();
 			}
 #if WINDOWS_SYSTEM_CPU_PARALLEL
 		});
@@ -117,7 +127,7 @@ bool ImageProcessingTools::Zoom_DefaultSampling4x4(PngData& input, PngData& resu
 		// numberOfExecutionThreads threads
 		for (auto i = 0; i < accelerator.GetNumThreads(); i++)
 		{
-			param.push(std::make_tuple<uint32_t, uint32_t>(GetFloorIndex(Y + i), Y + i));
+			param.push(Y + i);
 		}
 		Y += (accelerator.GetNumThreads() - 1);
 
@@ -141,7 +151,7 @@ bool ImageProcessingTools::Sharpen3x3(PngData& input, PngData& result,const floa
 
 	float32_t factor = -1.0f / strength;
 
-	const float32_t kernel[3][3] =
+	const float32_t kernel[3][3]
 	{
 		{ factor ,factor              ,factor},
 		{ factor ,1.0f - 8.0f * factor,factor},
@@ -165,17 +175,17 @@ bool ImageProcessingTools::Sharpen3x3(PngData& input, PngData& result,const floa
 			{
 				RGBAColor_32f rgba_f(0.0f, 0.0f, 0.0f, 0.0f);
 
-				rgba_f += RGBAColor_32f(input(X - 1, Y - 1)) * kernel[0][0];
-				rgba_f += RGBAColor_32f(input(X + 0, Y - 1)) * kernel[0][1];
-				rgba_f += RGBAColor_32f(input(X + 1, Y - 1)) * kernel[0][2];
+				rgba_f += RGBAColor_32f(input(X - 1, Y - 1),kernel[0][0]);
+				rgba_f += RGBAColor_32f(input(X + 0, Y - 1),kernel[0][1]);
+				rgba_f += RGBAColor_32f(input(X + 1, Y - 1),kernel[0][2]);
 
-				rgba_f += RGBAColor_32f(input(X - 1, Y + 0)) * kernel[1][0];
-				rgba_f += RGBAColor_32f(input(X + 0, Y + 0)) * kernel[1][1];
-				rgba_f += RGBAColor_32f(input(X + 1, Y + 0)) * kernel[1][2];
+				rgba_f += RGBAColor_32f(input(X - 1, Y + 0),kernel[1][0]);
+				rgba_f += RGBAColor_32f(input(X + 0, Y + 0),kernel[1][1]);
+				rgba_f += RGBAColor_32f(input(X + 1, Y + 0),kernel[1][2]);
 
-				rgba_f += RGBAColor_32f(input(X - 1, Y + 1)) * kernel[2][0];
-				rgba_f += RGBAColor_32f(input(X + 0, Y + 1)) * kernel[2][1];
-				rgba_f += RGBAColor_32f(input(X + 1, Y + 1)) * kernel[2][2];
+				rgba_f += RGBAColor_32f(input(X - 1, Y + 1),kernel[2][0]);
+				rgba_f += RGBAColor_32f(input(X + 0, Y + 1),kernel[2][1]);
+				rgba_f += RGBAColor_32f(input(X + 1, Y + 1),kernel[2][2]);
 
 				result(X, Y) = rgba_f.toRGBAColor_8i();
 			}
@@ -221,7 +231,7 @@ bool ImageProcessingTools::AecsHdrToneMapping(PngData& inputOutput, const float3
 			{
 				RGBAColor_32f rgba_f = RGBAColor_32f(inputOutput(X, Y));
 
-				ImageProcessingTools::ACESToneMapping(rgba_f, lumRatio);
+				ImageProcessingTools::ACESToneMappingColor(rgba_f, lumRatio);
 
 				inputOutput(X, Y) = rgba_f.toRGBAColor_8i();
 			}
@@ -244,7 +254,7 @@ bool ImageProcessingTools::AecsHdrToneMapping(PngData& inputOutput, const float3
 	return true;
 }
 
-bool ImageProcessingTools::Grayscale(PngData& inputOutput)
+bool ImageProcessingTools::ReverseColorImage(PngData& inputOutput)
 {
 	if (inputOutput.getRGBA_uint8().size() == 0)//Handle it well, otherwise there will be problems in parallel
 		return false;
@@ -264,13 +274,181 @@ bool ImageProcessingTools::Grayscale(PngData& inputOutput)
 #endif
 			for (auto X = 0u; X < inputOutput.width; ++X)
 			{
-				ImageProcessingTools::GrayColor(inputOutput(X, Y));
+				ReverseColor(inputOutput(X, Y));
+			}
+
+#if WINDOWS_SYSTEM_CPU_PARALLEL
+		});
+#else
+	};
+		// numberOfExecutionThreads threads
+		for (auto i = 0; i < accelerator.GetNumThreads(); i++)
+		{
+			param.push(Y + i);
+		}
+		Y += (accelerator.GetNumThreads() - 1);
+
+		accelerator.Run(CalculateARowOfPixels, param);
+		accelerator.Join();
+	}
+#endif
+	return true;
+}
+
+bool ImageProcessingTools::Grayscale(PngData& input, PngData& result)
+{
+	if (input.getRGBA_uint8().size() == 0)//Handle it well, otherwise there will be problems in parallel
+		return false;
+
+	//not need this time
+	input.clearImage();
+
+	result.width = input.width;
+	result.height = input.height;
+	result.image.resize(input.getRGBA_uint8().size());
+
+#if WINDOWS_SYSTEM_CPU_PARALLEL
+	concurrency::parallel_for(0u, input.height, [&input,&result](uint32_t Y) {
+#else
+	CppParallelAccelerator accelerator;
+	std::queue<uint32_t> param;
+
+	for (auto Y = 0u; Y < input.height; ++Y) {
+
+		auto CalculateARowOfPixels = [&input,&result](uint32_t Y) {
+#endif
+			for (auto X = 0u; X < input.width; ++X)
+			{
+				ImageProcessingTools::GrayColor(input(X, Y), result.image[static_cast<size_t>(input.width) * Y + X]);
 			}
 
 #if WINDOWS_SYSTEM_CPU_PARALLEL
 		});
 #else
 };
+		// numberOfExecutionThreads threads
+		for (auto i = 0; i < accelerator.GetNumThreads(); i++)
+		{
+			param.push(Y + i);
+		}
+		Y += (accelerator.GetNumThreads() - 1);
+
+		accelerator.Run(CalculateARowOfPixels, param);
+		accelerator.Join();
+	}
+#endif
+	return true;
+}
+
+bool ImageProcessingTools::ChannelGrayScale(PngData& input, PngData& resultR, PngData& resultG, PngData& resultB)
+{
+	if (input.image.size() == 0)
+		return false;
+
+	resultR.width = input.width;
+	resultR.height = input.height;
+	resultG.width = input.width;
+	resultG.height = input.height;
+	resultB.width = input.width;
+	resultB.height = input.height;
+
+	resultR.image.resize(input.image.size() >> 2);
+	resultG.image.resize(input.image.size() >> 2);
+	resultB.image.resize(input.image.size() >> 2);
+
+	for (size_t i = 0; i < input.image.size(); i += 4)
+	{
+#if LITTLE_ENDIAN
+		resultR.image[i >> 2] = input.image[i];
+		resultG.image[i >> 2] = input.image[i + 1];
+		resultB.image[i >> 2] = input.image[i + 2];
+
+#else
+		resultB.image[i >> 2] = input.image[i + 1];
+		resultG.image[i >> 2] = input.image[i + 2];
+		resultR.image[i >> 2] = input.image[i + 3];
+#endif
+	}
+
+	return true;
+}
+
+bool ImageProcessingTools::VividnessAdjustment(PngData& inputOutput, const float32_t& vividRatio)
+{
+	if (inputOutput.getRGBA_uint8().size() == 0)//Handle it well, otherwise there will be problems in parallel
+		return false;
+
+	//not need this time
+	inputOutput.clearImage();
+
+#if WINDOWS_SYSTEM_CPU_PARALLEL
+	concurrency::parallel_for(0u, inputOutput.height, [&inputOutput,&vividRatio](uint32_t Y) {
+#else
+	CppParallelAccelerator accelerator;
+	std::queue<uint32_t> param;
+
+	for (auto Y = 0u; Y < inputOutput.height; ++Y) {
+
+		auto CalculateARowOfPixels = [&inputOutput,&vividRatio](uint32_t Y) {
+#endif
+			for (auto X = 0u; X < inputOutput.width; ++X)
+			{
+				RGBAColor_32f color(inputOutput(X, Y));
+
+				ImageProcessingTools::VividnessAdjustmentColor(color,vividRatio);
+
+				inputOutput(X, Y) = color.toRGBAColor_8i();
+			}
+
+#if WINDOWS_SYSTEM_CPU_PARALLEL
+		});
+#else
+	};
+		// numberOfExecutionThreads threads
+		for (auto i = 0; i < accelerator.GetNumThreads(); i++)
+		{
+			param.push(Y + i);
+		}
+		Y += (accelerator.GetNumThreads() - 1);
+
+		accelerator.Run(CalculateARowOfPixels, param);
+		accelerator.Join();
+	}
+#endif
+	return true;
+}
+
+bool ImageProcessingTools::Binarization(PngData& input, PngData& result, const float32_t& threshold)
+{
+	if (input.getRGBA_uint8().size() == 0)//Handle it well, otherwise there will be problems in parallel
+		return false;
+
+	//not need this time
+	input.clearImage();
+
+	result.width = input.width;
+	result.height = input.height;
+	result.image.resize(input.getRGBA_uint8().size());
+
+#if WINDOWS_SYSTEM_CPU_PARALLEL
+	concurrency::parallel_for(0u, input.height, [&input,&result,&threshold](uint32_t Y) {
+#else
+	CppParallelAccelerator accelerator;
+	std::queue<uint32_t> param;
+
+	for (auto Y = 0u; Y < input.height; ++Y) {
+
+		auto CalculateARowOfPixels = [&input,&result,&threshold](uint32_t Y) {
+#endif
+			for (auto X = 0u; X < input.width; ++X)
+			{
+				ImageProcessingTools::BinarizationColor(input(X, Y), threshold, result.image[static_cast<size_t>(input.width) * Y + X]);
+			}
+
+#if WINDOWS_SYSTEM_CPU_PARALLEL
+		});
+#else
+	};
 		// numberOfExecutionThreads threads
 		for (auto i = 0; i < accelerator.GetNumThreads(); i++)
 		{
@@ -348,14 +526,18 @@ void ImageProcessingTools::exportFile(const byte* result, const uint32_t& width,
 void ImageProcessingTools::help()
 {
 	std::cout << "Check Help Info.\n\n"
-		<< "Help:[--] is a prompt, not an input.\n"
+		<< "Help:[---] is a prompt, not an input.\n"
 		<< "Startup parameters-->\n"
-		<< "[default zoom]: z\n"
-		<< "[bicubic zoom]: Z [Feature not currently supported]\n"
-		<< "[sharpen]: s or S\n"
-		<< "[tone mapping]:t or T\n"
-		<< "[gray scale]:g or G\n"
-		<< "[cut]: c or C [Feature not currently supported]\n\n"
+		<< "[    default zoom    ]: z\n"
+		<< "[    bicubic zoom    ]: Z      [Feature not currently supported]\n"
+		<< "[       sharpen      ]: s or S\n"
+		<< "[    tone mapping    ]: t or T\n"
+		<< "[     gray scale     ]: g\n"
+		<< "[ channle gray scale ]: G\n"
+		<< "[    reverse color   ]: r or R\n"
+		<< "[     binarization   ]: b or B\n"
+		<< "[vividness Adjustment]: v or V\n"
+		<< "[         cut        ]: c or C [Feature not currently supported]\n\n"
 		<< "Input Sample-->\n"
 		<< "./exe filename.png z[default zoom] 1.0[zoom ratio:has default value] 0.5[center weight:has default value] 2[Exponent:has default value]\n"
 		<< "[default zoom]\n[zoom ratio(from 0.001 to 32.0)]\n[center weight(from 0.25 to 13.0,0.25:similar to MSAAx16,1.0:similar to bilinear,>1:sharp)]\n[Exponent(from 1 to 4:0.5,1.0,2.0,4.0)]\n\n"
@@ -363,6 +545,14 @@ void ImageProcessingTools::help()
 		<< "[tone mapping]\n[lumming ratio(from 0.1 to 16.0)]\n\n"
 		<< "./exe filename.png g[gray scale]\n"
 		<< "[gray scale]\n\n"
+		<< "./exe filename.png G[channle gray scale]\n"
+		<< "[channle gray scale]\n\n"
+		<< "./exe filename.png b[binarization] 0.5[binarization threshold:has default value]\n"
+		<< "[binarization]\n[binarization threshold(from 0 to 1-1/255)]\n\n"
+		<< "./exe filename.png v[vividness Adjustment] 0.2[vivid ratio:has default value]\n"
+		<< "[vividness Adjustment]\n"
+		<< "[vivid ratio(from -1.0 to 254.0)]\n\n"
+		<< "./exe filename.png r[reverse color]\n[reverse color]\n\n"
 		<< "./exe filename.png s[sharpen] 4.0[sharpen ratio:has default value]\n"
 		<< "[sharpen]\n[sharpen ratio(from 0.2 to 16.0)]\n\n"
 		<< "./exe filename.png c[cut] 1024[Horizontal size] 1024[Vertical size]\n" << std::endl;
@@ -407,8 +597,6 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 	switch (mode)
 	{
 	case (int)Mode::zoom:
-
-
 		if (argCount > 3)
 		{
 			iss.clear();
@@ -443,6 +631,7 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 
 	case (int)Mode::sharpen:
 	case (int)Mode::Sharpen:
+		Ratio = 1.0f;
 		if (argCount > 3)
 		{
 			iss.clear();
@@ -466,12 +655,47 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 			iss.str(argValues[3]);
 			iss >> Ratio;
 		}
-		ImageProcessingTools::hdrToneMappingProgram(Ratio, pngfile);
+		ImageProcessingTools::hdrToneMappingColorProgram(Ratio, pngfile);
 		break;
 
 	case (int)Mode::grayScale:
-	case (int)Mode::GrayScale:
 		ImageProcessingTools::grayColorProgram(pngfile);
+		break;
+
+	case (int)Mode::GrayScale:
+		ImageProcessingTools::channelGrayColorProgram(pngfile);
+		break;
+
+	case (int)Mode::reverseColor:
+	case (int)Mode::ReverseColor:
+		ImageProcessingTools::reverseColorProgram(pngfile);
+		break;
+
+	case (int)Mode::vividness:
+	case (int)Mode::Vividness:
+		Ratio = 0.2f;
+
+		if (argCount > 3)
+		{
+			iss.clear();
+			iss.str(argValues[3]);
+			iss >> Ratio;
+		}
+
+		ImageProcessingTools::VividnessAdjustmentColorProgram(Ratio, pngfile);
+		break;
+
+	case (int)Mode::binarization:
+	case (int)Mode::Binarization:
+		Ratio = 0.5f;
+
+		if (argCount > 3)
+		{
+			iss.clear();
+			iss.str(argValues[3]);
+			iss >> Ratio;
+		}
+		ImageProcessingTools::BinarizationColorProgram(Ratio, pngfile);
 		break;
 
 	default:
@@ -595,7 +819,7 @@ void ImageProcessingTools::sharpenProgram(float32_t& sharpenRatio, std::filesyst
 	}
 }
 
-void ImageProcessingTools::hdrToneMappingProgram(float32_t& lumRatio, std::filesystem::path& pngfile)
+void ImageProcessingTools::hdrToneMappingColorProgram(float32_t& lumRatio, std::filesystem::path& pngfile)
 {
 	std::cout << "Input lumming factor:" << lumRatio << '\n' << std::endl;
 
@@ -631,19 +855,19 @@ void ImageProcessingTools::hdrToneMappingProgram(float32_t& lumRatio, std::files
 	}
 }
 
-void ImageProcessingTools::grayColorProgram(std::filesystem::path& pngfile)
+void ImageProcessingTools::reverseColorProgram(std::filesystem::path& pngfile)
 {
-	std::cout << "Grayscale:\n"
+	std::cout << "ReverseColor:\n"
 		<< "Start processing . . ." << std::endl;
 
 	PngData image;
 	importFile(image, pngfile);
 
-	if (ImageProcessingTools::Grayscale(image))
+	if (ImageProcessingTools::ReverseColorImage(image))
 	{
 		std::wstring resultname;
 		resultname.append(pngfile.parent_path()).append(L"\\").append(pngfile.stem())
-			.append(L"_gray")
+			.append(L"_reverse")
 			.append(pngfile.extension());
 
 #if LITTLE_ENDIAN
@@ -655,6 +879,155 @@ void ImageProcessingTools::grayColorProgram(std::filesystem::path& pngfile)
 
 		exportFile(image, resultname);
 #endif
+	}
+	else
+	{
+		std::cout << "Something wrong in convert." << std::endl;
+		exit(0);
+	}
+}
+
+void ImageProcessingTools::grayColorProgram(std::filesystem::path& pngfile)
+{
+	std::cout << "Grayscale:\n"
+		<< "Start processing . . ." << std::endl;
+
+	PngData image,result;
+	importFile(image, pngfile);
+
+	if (ImageProcessingTools::Grayscale(image,result))
+	{
+		std::wstring resultname;
+		resultname.append(pngfile.parent_path()).append(L"\\").append(pngfile.stem())
+			.append(L"_gray")
+			.append(pngfile.extension());
+
+		exportFile(result.image.data(), result.width, result.height, resultname, LodePNGColorType::LCT_GREY);
+	}
+	else
+	{
+		std::cout << "Something wrong in convert." << std::endl;
+		exit(0);
+	}
+}
+
+void ImageProcessingTools::channelGrayColorProgram(std::filesystem::path& pngfile)
+{
+	std::cout << "ChannelGrayscale:\n"
+		<< "Start processing . . ." << std::endl;
+
+	PngData image;
+	importFile(image, pngfile);
+
+	PngData imageR;
+	PngData imageG;
+	PngData imageB;
+
+	if (ImageProcessingTools::ChannelGrayScale(image, imageR, imageG, imageB))
+	{
+		image.clearImage();
+
+		std::wstring resultnameR;
+		std::wstring resultnameG;
+		std::wstring resultnameB;
+
+		resultnameR.append(pngfile.parent_path()).append(L"\\").append(pngfile.stem())
+			.append(L"_Red_gray")
+			.append(pngfile.extension());
+
+		resultnameG.append(pngfile.parent_path()).append(L"\\").append(pngfile.stem())
+			.append(L"_Green_gray")
+			.append(pngfile.extension());
+
+		resultnameB.append(pngfile.parent_path()).append(L"\\").append(pngfile.stem())
+			.append(L"_Blue_gray")
+			.append(pngfile.extension());
+
+		auto exportChannel = [](PngData *result, std::wstring *resultname) {
+			ImageProcessingTools::exportFile(result->image.data(), result->width, result->height, *resultname, LodePNGColorType::LCT_GREY);
+		};
+
+		std::thread RedChannel(exportChannel, &imageR, &resultnameR);
+		std::thread GreenChannel(exportChannel, &imageG, &resultnameG);
+		std::thread BlueChannel(exportChannel, &imageB, &resultnameB);
+
+		if (RedChannel.joinable())
+			RedChannel.join();
+
+		if (GreenChannel.joinable())
+			GreenChannel.join();
+
+		if (BlueChannel.joinable())
+			BlueChannel.join();
+	}
+	else
+	{
+		std::cout << "Something wrong in convert." << std::endl;
+		exit(0);
+	}
+}
+
+void ImageProcessingTools::VividnessAdjustmentColorProgram(float32_t& VividRatio, std::filesystem::path& pngfile)
+{
+	std::cout << "Input Vivid factor:" << VividRatio << '\n' << std::endl;
+
+	Clamp(VividRatio, -1.0f, 254.0f);
+
+
+	std::cout << "Adoption Vivid factor:" << VividRatio << '\n'
+		<< "Start processing . . ." << std::endl;
+
+	PngData image;
+	importFile(image, pngfile);
+
+	if (ImageProcessingTools::VividnessAdjustment(image,VividRatio))
+	{
+		image.clear();
+
+		std::wstring resultname;
+		resultname.append(pngfile.parent_path()).append(L"\\").append(pngfile.stem())
+			.append(L"_vivid_x").append(std::to_wstring(VividRatio))
+			.append(pngfile.extension());
+
+#if LITTLE_ENDIAN
+		exportFile(reinterpret_cast<byte*>(image.getRGBA_uint8().data()), image.width, image.height, resultname);
+#else
+		//load result into stream to save to file
+		image.loadRGBAtoByteStream();
+		image.clearRGBA_uint8();
+
+		exportFile(image, resultname);
+#endif
+	}
+	else
+	{
+		std::cout << "Something wrong in convert." << std::endl;
+		exit(0);
+	}
+}
+
+void ImageProcessingTools::BinarizationColorProgram(float32_t& threshold, std::filesystem::path& pngfile)
+{
+	std::cout << "Input threshold factor:" << threshold << '\n' << std::endl;
+
+	Clamp(threshold, 0.0f, 1.0f - ColorPixTofloat);
+
+	std::cout << "Adoption threshold factor:" << threshold << '\n'
+		<< "Start processing . . ." << std::endl;
+
+	PngData image, result;
+	importFile(image, pngfile);
+
+	if (ImageProcessingTools::Binarization(image, result, threshold))
+	{
+		image.clear();
+
+		std::wstring resultname;
+		resultname.append(pngfile.parent_path()).append(L"\\").append(pngfile.stem())
+			.append(L"_binarization_").append(std::to_wstring(threshold))
+			.append(pngfile.extension());
+
+		exportFile(result.image.data(), result.width, result.height, resultname, LodePNGColorType::LCT_GREY);
 	}
 	else
 	{

@@ -92,13 +92,13 @@ int main(int argc, char* argv[])
 	clockTimer timer;
 	timer.TimerStart();
 
-	//float32_t Ratio = 1.075f;
-	//float32_t centerWeight = 0.64f;
+	float32_t Ratio = 0.5f;
+	//float32_t centerWeight = 0.75f;
 	pngfile = "D:/pics/4K.png";
 	//uint32_t exponent = (uint32_t)ImageProcessingTools::Exponent::one;
 
 	//ImageProcessingTools::zoomProgramDefault(Ratio, pngfile, centerWeight, (ImageProcessingTools::Exponent)exponent);
-	ImageProcessingTools::grayColorProgram(pngfile);
+	ImageProcessingTools::BinarizationColorProgram(Ratio,pngfile);
 
 	timer.TimerStop();
 	std::cout << "Time use:" << timer.getTime();
