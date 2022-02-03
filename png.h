@@ -252,12 +252,18 @@ public:
 		Vividness = 'V',
 		binarization = 'b',
 		Binarization = 'B',
+		quaternization = 'q',
+		Quaternization = 'Q',
+		hexadecimalization = 'h',
+		Hexadecimalization = 'H',
 		unknown = '?'
 	};
 
 protected:
 	static void GrayColor(const RGBAColor_8i& color,byte& result);
-	static void BinarizationColor(const RGBAColor_8i& color,const float32_t& threshold,byte& result);
+	static void BinarizationColor(const RGBAColor_8i& color,const float32_t& threshold,byte& result);//Too few colors, need to adjust the threshold
+	static void QuaternizationColor(const RGBAColor_8i& color, const float32_t& threshold, byte& result);//Too few colors, need to adjust the threshold
+	static void HexadecimalizationColor(const RGBAColor_8i& color, byte& result);//16 colors are rich enough, no need for thresholding anymore
 	static void ReverseColor(RGBAColor_8i& color);
 	static void VividnessAdjustmentColor(RGBAColor_32f& color,const float32_t& changeMagnification);
 	static void ACESToneMappingColor(RGBAColor_32f& color, const float32_t& adapted_lum);
@@ -285,6 +291,8 @@ public:
 	static void channelGrayColorProgram(std::filesystem::path& pngfile);
 	static void VividnessAdjustmentColorProgram(float32_t& VividRatio,std::filesystem::path& pngfile);
 	static void BinarizationColorProgram(float32_t& threshold, std::filesystem::path& pngfile);
+	static void QuaternizationColorProgram(float32_t& threshold, std::filesystem::path& pngfile);
+	static void HexadecimalizationColorProgram(std::filesystem::path& pngfile);
 
 	//The following three methods rely on lodepng
 	static void importFile(PngData& data, std::filesystem::path& pngfile);
@@ -305,6 +313,8 @@ public:
 	static bool ChannelGrayScale(PngData& input, PngData& resultR, PngData& resultG, PngData& resultB);
 	static bool VividnessAdjustment(PngData& inputOutput, const float32_t& vividRatio = 0.2f);
 	static bool Binarization(PngData& input, PngData& result, const float32_t& threshold = 0.5f);
+	static bool Quaternization(PngData& input, PngData& result, const float32_t& threshold = 0.5f);
+	static bool Hexadecimalization(PngData& input, PngData& result);
 };
 
 
@@ -606,16 +616,140 @@ inline void PngData::clear()
 
 inline void ImageProcessingTools::GrayColor(const RGBAColor_8i& color, byte& result)
 {
-	float32_t sum = color.R + color.G + color.B;
-
-	result = sum / 3;
+	result = (color.R + color.G + color.B) * 0.33333f;
 }
 
 inline void ImageProcessingTools::BinarizationColor(const RGBAColor_8i& color, const float32_t& threshold, byte& result)
 {
-	float32_t sum = color.R + color.G + color.B;
+	float32_t avg = (color.R + color.G + color.B) * 0.33333f;
 
-	result = (sum >= threshold * maxColorPix * 3.0f) ? 0xFF : 0;
+	float32_t l = threshold * maxColorPix;
+
+	result = (avg >= l) ? 0xFF : 0;
+}
+
+inline void ImageProcessingTools::QuaternizationColor(const RGBAColor_8i& color, const float32_t& threshold, byte& result)
+{
+	float32_t avg = (color.R + color.G + color.B) * 0.33333f;
+
+	float32_t l1 = 171.0f;
+	float32_t l2 = 86.0f;
+	float32_t l3 = 1.0f;
+
+	Lerp(l1, 255.0f, threshold);
+	Lerp(l2, 170.0f, threshold);
+	Lerp(l3, 85.0f, threshold);
+
+	if (avg >= l1)
+	{
+		result = 255u;
+	}
+	else
+		if (avg >= l2)
+		{
+			result = 170u;
+		}
+		else
+			if (avg >= l3)
+			{
+				result = 85u;
+			}
+			else
+			{
+				result = 0u;
+			}
+}
+
+inline void ImageProcessingTools::HexadecimalizationColor(const RGBAColor_8i& color, byte& result)
+{
+	uint16_t avg = (color.R + color.G + color.B) / 3u;
+
+	uint8_t separateAvg = avg >> 3u;
+
+	if (separateAvg >= 31u)
+	{
+		result = 255u;
+	}
+	else
+		if(separateAvg >= 29u)
+		{
+			result = 239u;
+		}
+		else
+			if (separateAvg >= 27u)
+			{
+				result = 223u;
+			}
+			else
+				if (separateAvg >= 25u)
+				{
+					result = 207u;
+				}
+				else
+					if (separateAvg >= 23u)
+					{
+						result = 191u;
+					}
+					else
+						if (separateAvg >= 21u)
+						{
+							result = 175u;
+						}
+						else
+							if (separateAvg >= 19u)
+							{
+								result = 159u;
+							}
+							else
+								if (separateAvg >= 17u)
+								{
+									result = 143u;
+								}
+								else
+									if (separateAvg >= 15u)
+									{
+										result = 127u;
+									}
+									else
+										if (separateAvg >= 13u)
+										{
+											result = 111u;
+										}
+										else
+											if (separateAvg >= 11u)
+											{
+												result = 95u;
+											}
+											else
+												if (separateAvg >= 9u)
+												{
+													result = 79u;
+												}
+												else
+													if (separateAvg >= 7u)
+													{
+														result = 63u;
+													}
+													else
+														if (separateAvg >= 5u)
+														{
+															result = 47u;
+														}
+														else
+															if (separateAvg >= 3u)
+															{
+																result = 31u;
+															}
+															else
+																if (separateAvg >= 1u)
+																{
+																	result = 15u;
+																}
+																else
+																{
+																	result = 0u;
+																}
+
 }
 
 inline void ImageProcessingTools::ReverseColor(RGBAColor_8i& color)
@@ -630,7 +764,7 @@ inline void ImageProcessingTools::VividnessAdjustmentColor(RGBAColor_32f& color,
 
 	float32_t Alpha = color.A;
 
-	float32_t avg = (color.R + color.G + color.B) / 3.0f;
+	float32_t avg = (color.R + color.G + color.B) * 0.33333f;
 
 	color -= avg;
 

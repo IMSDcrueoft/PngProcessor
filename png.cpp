@@ -38,7 +38,7 @@ bool ImageProcessingTools::Zoom_DefaultSampling4x4(PngData& input, PngData& resu
 	auto& resultRGBA = result.getRGBA_uint8();
 	resultRGBA.resize(static_cast<size_t>(result.width) * result.height);
 
-	float32_t center = CenterWeight / 4.0f;
+	float32_t center = CenterWeight * 0.25f;
 	float32_t outer = (1.0f - CenterWeight) / 12.0f;
 
 	const float32_t kernel[4][4]
@@ -463,6 +463,96 @@ bool ImageProcessingTools::Binarization(PngData& input, PngData& result, const f
 	return true;
 }
 
+bool ImageProcessingTools::Quaternization(PngData& input, PngData& result, const float32_t& threshold)
+{
+	if (input.getRGBA_uint8().size() == 0)//Handle it well, otherwise there will be problems in parallel
+		return false;
+
+	//not need this time
+	input.clearImage();
+
+	result.width = input.width;
+	result.height = input.height;
+	result.image.resize(input.getRGBA_uint8().size());
+
+#if WINDOWS_SYSTEM_CPU_PARALLEL
+	concurrency::parallel_for(0u, input.height, [&input, &result, &threshold](uint32_t Y) {
+#else
+	CppParallelAccelerator accelerator;
+	std::queue<uint32_t> param;
+
+	for (auto Y = 0u; Y < input.height; ++Y) {
+
+		auto CalculateARowOfPixels = [&input, &result, &threshold](uint32_t Y) {
+#endif
+			for (auto X = 0u; X < input.width; ++X)
+			{
+				ImageProcessingTools::QuaternizationColor(input(X, Y), threshold, result.image[static_cast<size_t>(input.width) * Y + X]);
+			}
+
+#if WINDOWS_SYSTEM_CPU_PARALLEL
+		});
+#else
+	};
+		// numberOfExecutionThreads threads
+		for (auto i = 0; i < accelerator.GetNumThreads(); i++)
+		{
+			param.push(Y + i);
+		}
+		Y += (accelerator.GetNumThreads() - 1);
+
+		accelerator.Run(CalculateARowOfPixels, param);
+		accelerator.Join();
+	}
+#endif
+	return true;
+}
+
+bool ImageProcessingTools::Hexadecimalization(PngData& input, PngData& result)
+{
+	if (input.getRGBA_uint8().size() == 0)//Handle it well, otherwise there will be problems in parallel
+		return false;
+
+	//not need this time
+	input.clearImage();
+
+	result.width = input.width;
+	result.height = input.height;
+	result.image.resize(input.getRGBA_uint8().size());
+
+#if WINDOWS_SYSTEM_CPU_PARALLEL
+	concurrency::parallel_for(0u, input.height, [&input, &result](uint32_t Y) {
+#else
+	CppParallelAccelerator accelerator;
+	std::queue<uint32_t> param;
+
+	for (auto Y = 0u; Y < input.height; ++Y) {
+
+		auto CalculateARowOfPixels = [&input, &result](uint32_t Y) {
+#endif
+			for (auto X = 0u; X < input.width; ++X)
+			{
+				ImageProcessingTools::HexadecimalizationColor(input(X, Y), result.image[static_cast<size_t>(input.width) * Y + X]);
+			}
+
+#if WINDOWS_SYSTEM_CPU_PARALLEL
+		});
+#else
+	};
+		// numberOfExecutionThreads threads
+		for (auto i = 0; i < accelerator.GetNumThreads(); i++)
+		{
+			param.push(Y + i);
+		}
+		Y += (accelerator.GetNumThreads() - 1);
+
+		accelerator.Run(CalculateARowOfPixels, param);
+		accelerator.Join();
+	}
+#endif
+	return true;
+}
+
 void ImageProcessingTools::importFile(PngData& data, std::filesystem::path& pngfile)
 {
 	auto path = AdaptString::toString(pngfile.wstring());
@@ -526,36 +616,62 @@ void ImageProcessingTools::exportFile(const byte* result, const uint32_t& width,
 void ImageProcessingTools::help()
 {
 	std::cout << "Check Help Info.\n\n"
-		<< "Help:[---] is a prompt, not an input.\n"
+		<< "Help:[---] is a prompt, not an input.[DF] means it has a default value.\n"
 		<< "Startup parameters-->\n"
-		<< "[    default zoom    ]: z\n"
-		<< "[    bicubic zoom    ]: Z      [Feature not currently supported]\n"
+		<< "[    default zoom    ]: z     \n"
+		<< "[    bicubic zoom    ]: Z       [Feature not currently supported]\n"
 		<< "[       sharpen      ]: s or S\n"
 		<< "[    tone mapping    ]: t or T\n"
-		<< "[     gray scale     ]: g\n"
-		<< "[ channle gray scale ]: G\n"
+		<< "[     gray scale     ]: g     \n"
+		<< "[ channle gray scale ]: G     \n"
 		<< "[    reverse color   ]: r or R\n"
-		<< "[     binarization   ]: b or B\n"
+		<< "[    binarization    ]: b or B\n"
+		<< "[   quaternization   ]: q or Q\n"
+		<< "[ hexadecimalization ]: h or H\n"
 		<< "[vividness Adjustment]: v or V\n"
-		<< "[         cut        ]: c or C [Feature not currently supported]\n\n"
+		<< "[         cut        ]: c or C  [Feature not currently supported]\n"
+		<< '\n'
 		<< "Input Sample-->\n"
-		<< "./exe filename.png z[default zoom] 1.0[zoom ratio:has default value] 0.5[center weight:has default value] 2[Exponent:has default value]\n"
-		<< "[default zoom]\n[zoom ratio(from 0.001 to 32.0)]\n[center weight(from 0.25 to 13.0,0.25:similar to MSAAx16,1.0:similar to bilinear,>1:sharp)]\n[Exponent(from 1 to 4:0.5,1.0,2.0,4.0)]\n\n"
-		<< "./exe filename.png t[tone mapping] 2.0[lumming ratio:has default value]\n"
-		<< "[tone mapping]\n[lumming ratio(from 0.1 to 16.0)]\n\n"
-		<< "./exe filename.png g[gray scale]\n"
-		<< "[gray scale]\n\n"
-		<< "./exe filename.png G[channle gray scale]\n"
-		<< "[channle gray scale]\n\n"
-		<< "./exe filename.png b[binarization] 0.5[binarization threshold:has default value]\n"
-		<< "[binarization]\n[binarization threshold(from 0 to 1-1/255)]\n\n"
-		<< "./exe filename.png v[vividness Adjustment] 0.2[vivid ratio:has default value]\n"
+		<< "./pngProcessor.exe filename.png z[default zoom] 1.0[zoom ratio:DF] 0.5[center weight:DF] 2[Exponent:DF]\n"
+		<< "[default zoom]\n"
+		<< "[zoom ratio(from 0.001 to 32.0)]\n"
+		<< "[center weight(from 0.25 to 13.0, 0.25:similar to MSAAx16, 1.0 : similar to bilinear, >1:sharp)]\n"
+		<< "[Exponent(from 1 to 4:0.5, 1.0, 2.0, 4.0)]\n"
+		<< '\n'
+		<< "./pngProcessor.exe filename.png t[tone mapping] 2.0[lumming ratio:DF]\n"
+		<< "[tone mapping]\n"
+		<< "[lumming ratio(from 0.1 to 16.0)]\n"
+		<< '\n'
+		<< "./pngProcessor.exe filename.png g[gray scale]\n"
+		<< "[gray scale]\n"
+		<< '\n'
+		<< "./pngProcessor.exe filename.png G[channle gray scale]\n"
+		<< "[channle gray scale]\n"
+		<< '\n'
+		<< "./pngProcessor.exe filename.png b[binarization] 0.5[binarization threshold:DF]\n"
+		<< "[binarization]\n"
+		<<"[binarization threshold(from 0 to 1-1/255)]\n"
+		<< '\n'
+		<< "./pngProcessor.exe filename.png q[quaternization] 0.5[quaternization threshold:DF]\n"
+		<< "[quaternization]\n"
+		<< "[quaternization threshold(from 0 to 1]\n"
+		<< '\n'
+		<< "./pngProcessor.exe filename.png h[hexadecimalization]\n"
+		<< "[hexadecimalization]\n"
+		<< '\n'
+		<< "./pngProcessor.exe filename.png v[vividness Adjustment] 0.2[vivid ratio:DF]\n"
 		<< "[vividness Adjustment]\n"
-		<< "[vivid ratio(from -1.0 to 254.0)]\n\n"
-		<< "./exe filename.png r[reverse color]\n[reverse color]\n\n"
-		<< "./exe filename.png s[sharpen] 4.0[sharpen ratio:has default value]\n"
-		<< "[sharpen]\n[sharpen ratio(from 0.2 to 16.0)]\n\n"
-		<< "./exe filename.png c[cut] 1024[Horizontal size] 1024[Vertical size]\n" << std::endl;
+		<< "[vivid ratio(from -1.0 to 254.0)]\n"
+		<< '\n'
+		<< "./pngProcessor.exe filename.png r[reverse color]\n"
+		<< "[reverse color]\n"
+		<< '\n'
+		<< "./pngProcessor.exe filename.png s[sharpen] 4.0[sharpen ratio:DF]\n"
+		<< "[sharpen]\n"
+		<< "[sharpen ratio(from 0.2 to 16.0)]\n"
+		<< '\n'
+		<< "./pngProcessor.exe filename.png c[cut] 1024[Horizontal size] 1024[Vertical size]\n" 
+		<< std::endl;
 }
 
 void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
@@ -696,6 +812,24 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 			iss >> Ratio;
 		}
 		ImageProcessingTools::BinarizationColorProgram(Ratio, pngfile);
+		break;
+
+	case (int)Mode::quaternization:
+	case (int)Mode::Quaternization:
+		Ratio = 0.5f;
+
+		if (argCount > 3)
+		{
+			iss.clear();
+			iss.str(argValues[3]);
+			iss >> Ratio;
+		}
+		ImageProcessingTools::QuaternizationColorProgram(Ratio,pngfile);
+		break;
+
+	case (int)Mode::hexadecimalization:
+	case (int)Mode::Hexadecimalization:
+		ImageProcessingTools::HexadecimalizationColorProgram(pngfile);
 		break;
 
 	default:
@@ -1025,6 +1159,62 @@ void ImageProcessingTools::BinarizationColorProgram(float32_t& threshold, std::f
 		std::wstring resultname;
 		resultname.append(pngfile.parent_path()).append(L"\\").append(pngfile.stem())
 			.append(L"_binarization_").append(std::to_wstring(threshold))
+			.append(pngfile.extension());
+
+		exportFile(result.image.data(), result.width, result.height, resultname, LodePNGColorType::LCT_GREY);
+	}
+	else
+	{
+		std::cout << "Something wrong in convert." << std::endl;
+		exit(0);
+	}
+}
+
+void ImageProcessingTools::QuaternizationColorProgram(float32_t& threshold,std::filesystem::path& pngfile)
+{
+	std::cout << "Input threshold factor:" << threshold << '\n' << std::endl;
+
+	Clamp(threshold, 0.0f, 1.0f);
+
+	std::cout << "Adoption threshold factor:" << threshold << '\n'
+		<< "Start processing . . ." << std::endl;
+
+	PngData image, result;
+	importFile(image, pngfile);
+
+	if (ImageProcessingTools::Quaternization(image, result,threshold))
+	{
+		image.clear();
+
+		std::wstring resultname;
+		resultname.append(pngfile.parent_path()).append(L"\\").append(pngfile.stem())
+			.append(L"_quaternization_").append(std::to_wstring(threshold))
+			.append(pngfile.extension());
+
+		exportFile(result.image.data(), result.width, result.height, resultname, LodePNGColorType::LCT_GREY);
+	}
+	else
+	{
+		std::cout << "Something wrong in convert." << std::endl;
+		exit(0);
+	}
+}
+
+void ImageProcessingTools::HexadecimalizationColorProgram(std::filesystem::path& pngfile)
+{
+	std::cout << "Hexadecimalization:\n"
+		<< "Start processing . . ." << std::endl;
+
+	PngData image, result;
+	importFile(image, pngfile);
+
+	if (ImageProcessingTools::Hexadecimalization(image, result))
+	{
+		image.clear();
+
+		std::wstring resultname;
+		resultname.append(pngfile.parent_path()).append(L"\\").append(pngfile.stem())
+			.append(L"_hexadecimalization")
 			.append(pngfile.extension());
 
 		exportFile(result.image.data(), result.width, result.height, resultname, LodePNGColorType::LCT_GREY);
