@@ -49,7 +49,7 @@ so you should also comply with the requirements of its header declaration
 
 #ifndef OPERATING_SYSTEM
 #define OPERATING_SYSTEM
-#define WINDOWS_SYSTEM_CPU_PARALLEL false
+#define WINDOWS_SYSTEM_CPU_PARALLEL true
 #endif//OPERATING_SYSTEM
 
 #if WINDOWS_SYSTEM_CPU_PARALLEL

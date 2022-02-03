@@ -897,6 +897,8 @@ void ImageProcessingTools::grayColorProgram(std::filesystem::path& pngfile)
 
 	if (ImageProcessingTools::Grayscale(image,result))
 	{
+		image.clear();
+
 		std::wstring resultname;
 		resultname.append(pngfile.parent_path()).append(L"\\").append(pngfile.stem())
 			.append(L"_gray")
@@ -982,8 +984,6 @@ void ImageProcessingTools::VividnessAdjustmentColorProgram(float32_t& VividRatio
 
 	if (ImageProcessingTools::VividnessAdjustment(image,VividRatio))
 	{
-		image.clear();
-
 		std::wstring resultname;
 		resultname.append(pngfile.parent_path()).append(L"\\").append(pngfile.stem())
 			.append(L"_vivid_x").append(std::to_wstring(VividRatio))
