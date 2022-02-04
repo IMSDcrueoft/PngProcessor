@@ -625,7 +625,7 @@ inline void ImageProcessingTools::BinarizationColor(const RGBAColor_8i& color, c
 
 	float32_t l = threshold * maxColorPix;
 
-	result = (avg >= l) ? 0xFF : 0;
+	result = (avg >= l) ? 0b1111'1111u : 0b0000'0000u;
 }
 
 inline void ImageProcessingTools::QuaternizationColor(const RGBAColor_8i& color, const float32_t& threshold, byte& result)
@@ -642,21 +642,21 @@ inline void ImageProcessingTools::QuaternizationColor(const RGBAColor_8i& color,
 
 	if (avg >= l1)
 	{
-		result = 255u;
+		result = 0b1111'1111u;
 	}
 	else
 		if (avg >= l2)
 		{
-			result = 170u;
+			result = 0b1010'1010u;
 		}
 		else
 			if (avg >= l3)
 			{
-				result = 85u;
+				result = 0b0101'0101u;
 			}
 			else
 			{
-				result = 0u;
+				result = 0b0000'0000u;
 			}
 }
 
@@ -664,90 +664,83 @@ inline void ImageProcessingTools::HexadecimalizationColor(const RGBAColor_8i& co
 {
 	uint16_t avg = (color.R + color.G + color.B) / 3u;
 
-	uint8_t separateAvg = avg >> 3u;
-
-	if (separateAvg >= 31u)
+	if (avg >= 247u)
 	{
-		result = 255u;
+		result = 0b1111'1111u;
 	}
 	else
-		if(separateAvg >= 29u)
+		if(avg >= 230u)
 		{
-			result = 239u;
+			result = 0b1110'1110u;
 		}
 		else
-			if (separateAvg >= 27u)
+			if (avg >= 213u)
 			{
-				result = 223u;
+				result = 0b1101'1101u;
 			}
 			else
-				if (separateAvg >= 25u)
+				if (avg >= 196u)
 				{
-					result = 207u;
+					result = 0b1100'1100u;
 				}
 				else
-					if (separateAvg >= 23u)
+					if (avg >= 179u)
 					{
-						result = 191u;
+						result = 0b1011'1011u;
 					}
 					else
-						if (separateAvg >= 21u)
+						if (avg >= 162u)
 						{
-							result = 175u;
+							result = 0b1010'1010u;
 						}
 						else
-							if (separateAvg >= 19u)
+							if (avg >= 145u)
 							{
-								result = 159u;
+								result = 0b1001'1001u;
 							}
 							else
-								if (separateAvg >= 17u)
+								if (avg >= 128u)
 								{
-									result = 143u;
+									result = 0b1000'1000u;
 								}
 								else
-									if (separateAvg >= 15u)
+									if (avg >= 111u)
 									{
-										result = 127u;
+										result = 0b0111'0111u;
 									}
 									else
-										if (separateAvg >= 13u)
+										if (avg >= 94u)
 										{
-											result = 111u;
+											result = 0b0110'0110u;
 										}
 										else
-											if (separateAvg >= 11u)
+											if (avg >= 77u)
 											{
-												result = 95u;
+												result = 0b0101'0101u;
 											}
 											else
-												if (separateAvg >= 9u)
+												if (avg >= 60u)
 												{
-													result = 79u;
+													result = 0b0100'0100u;
 												}
 												else
-													if (separateAvg >= 7u)
+													if (avg >= 43u)
 													{
-														result = 63u;
+														result = 0b0011'0011u;
 													}
 													else
-														if (separateAvg >= 5u)
+														if (avg >= 26u)
 														{
-															result = 47u;
+															result = 0b0010'0010u;
 														}
 														else
-															if (separateAvg >= 3u)
+															if (avg >= 9u)
 															{
-																result = 31u;
+																result = 0b0001'0001u;
 															}
 															else
-																if (separateAvg >= 1u)
 																{
-																	result = 15u;
-																}
-																else
-																{
-																	result = 0u;
+																	result = 0b0000'0000u;
 																}
 
 }
