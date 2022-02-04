@@ -94,11 +94,13 @@ int main(int argc, char* argv[])
 
 	float32_t Ratio = 0.5f;
 	//float32_t centerWeight = 0.75f;
-	pngfile = "E:/pic/pixiv/spec/76814263_ULTRA_2400x2750HD2.png";
+	pngfile = "D:/pics/4K.png";
 	//uint32_t exponent = (uint32_t)ImageProcessingTools::Exponent::one;
 
 	//ImageProcessingTools::zoomProgramDefault(Ratio, pngfile, centerWeight, (ImageProcessingTools::Exponent)exponent);
-	ImageProcessingTools::VividnessAdjustmentColorProgram(Ratio,pngfile);
+	uint32_t x = 1920;
+	uint32_t y = 1080;
+	ImageProcessingTools::blockSplit(x, y, pngfile);
 
 	timer.TimerStop();
 	std::cout << "Time use:" << timer.getTime();

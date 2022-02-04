@@ -37,6 +37,7 @@ so you should also comply with the requirements of its header declaration
 #include <memory>
 #include <sstream>
 #include <tuple>
+#include <thread>
 
 /*
 * Processors in different working modes need to be treated differently
@@ -55,8 +56,6 @@ so you should also comply with the requirements of its header declaration
 #if WINDOWS_SYSTEM_CPU_PARALLEL
 #include<ppl.h>
 #endif //PARALLELISM
-
-#include<thread>
 
 
 /*
@@ -289,10 +288,12 @@ public:
 	static void reverseColorProgram(std::filesystem::path& pngfile);
 	static void grayColorProgram(std::filesystem::path& pngfile);
 	static void channelGrayColorProgram(std::filesystem::path& pngfile);
-	static void VividnessAdjustmentColorProgram(float32_t& VividRatio,std::filesystem::path& pngfile);
-	static void BinarizationColorProgram(float32_t& threshold, std::filesystem::path& pngfile);
-	static void QuaternizationColorProgram(float32_t& threshold, std::filesystem::path& pngfile);
-	static void HexadecimalizationColorProgram(std::filesystem::path& pngfile);
+	static void vividnessAdjustmentColorProgram(float32_t& VividRatio,std::filesystem::path& pngfile);
+	static void binarizationColorProgram(float32_t& threshold, std::filesystem::path& pngfile);
+	static void quaternizationColorProgram(float32_t& threshold, std::filesystem::path& pngfile);
+	static void hexadecimalizationColorProgram(std::filesystem::path& pngfile);
+	static void fastSplitHorizonProgram(uint32_t& splitInterval, std::filesystem::path& pngfile);
+	static void blockSplit(uint32_t& horizontalInterval,uint32_t& verticalInterval, std::filesystem::path& pngfile);
 
 	//The following three methods rely on lodepng
 	static void importFile(PngData& data, std::filesystem::path& pngfile);
@@ -876,10 +877,3 @@ inline void ImageProcessingTools::weightEffectQuartet(const float32_t& dx, const
 }
 
 #endif // !PNG
-/*
-SSE2每次可以处理4个RGBA像素RGBA'RGBA'RGBA'RGBA 或者 RGB0'RGB0'RGB0'RGB0
-算出块数可以用(num + 512u) / 1024u
-相当于 (num + 512u) >> 10u
-为了防止大小太小结果为0,可让结果与0x00'00'00'01 进行|运算
-也就是((num + 512u) >> 10u) | 0x00'00'00'01
-*/

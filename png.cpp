@@ -38,7 +38,7 @@ bool ImageProcessingTools::Zoom_DefaultSampling4x4(PngData& input, PngData& resu
 	auto& resultRGBA = result.getRGBA_uint8();
 	resultRGBA.resize(static_cast<size_t>(result.width) * result.height);
 
-	float32_t center = CenterWeight * 0.25f;
+	/*float32_t center = CenterWeight * 0.25f;
 	float32_t outer = (1.0f - CenterWeight) / 12.0f;
 
 	const float32_t kernel[4][4]
@@ -47,6 +47,18 @@ bool ImageProcessingTools::Zoom_DefaultSampling4x4(PngData& input, PngData& resu
 		{outer,center,center,outer},
 		{outer,center,center,outer},
 		{outer,outer,outer,outer}
+	};*/
+
+	float32_t center    = CenterWeight * 0.250f;
+	float32_t outerNear = (1.0f - CenterWeight) * 0.0910628715f;
+	float32_t outerFar  = (1.0f - CenterWeight) * 0.0678742569f;
+
+	const float32_t kernel[4][4]
+	{
+		{outerFar ,outerNear,outerNear,outerFar },
+		{outerNear,center	,center	  ,outerNear},
+		{outerNear,center	,center	  ,outerNear},
+		{outerFar ,outerNear,outerNear,outerFar }
 	};
 
 #if WINDOWS_SYSTEM_CPU_PARALLEL
@@ -149,13 +161,15 @@ bool ImageProcessingTools::Sharpen3x3(PngData& input, PngData& result,const floa
 	auto& resultRGBA = result.getRGBA_uint8();
 	resultRGBA.resize(static_cast<size_t>(result.width) * result.height);
 
-	float32_t factor = -1.0f / strength;
+	float32_t factor = -0.01f * strength;
+	constexpr float32_t oneHalfRoot = 0.70710678f;
+	constexpr float32_t oneHalfRootPlusOne = oneHalfRoot + 1.0f;
 
 	const float32_t kernel[3][3]
 	{
-		{ factor ,factor              ,factor},
-		{ factor ,1.0f - 8.0f * factor,factor},
-		{ factor ,factor              ,factor}
+		{ factor * oneHalfRoot ,factor								        ,factor * oneHalfRoot },
+		{ factor               ,1.0f - (4.0f * oneHalfRootPlusOne) * factor ,factor				 },
+		{ factor * oneHalfRoot ,factor								        ,factor * oneHalfRoot }
 	};
 
 #if WINDOWS_SYSTEM_CPU_PARALLEL
@@ -629,7 +643,8 @@ void ImageProcessingTools::help()
 		<< "[   quaternization   ]: q or Q\n"
 		<< "[ hexadecimalization ]: h or H\n"
 		<< "[vividness Adjustment]: v or V\n"
-		<< "[         cut        ]: c or C  [Feature not currently supported]\n"
+		<< "[         cut        ]: c     \n"
+		<< "[     cut horizon    ]: C     \n"
 		<< '\n'
 		<< "Input Sample-->\n"
 		<< "./pngProcessor.exe filename.png z[default zoom] 1.0[zoom ratio:DF] 0.5[center weight:DF] 2[Exponent:DF]\n"
@@ -650,7 +665,7 @@ void ImageProcessingTools::help()
 		<< '\n'
 		<< "./pngProcessor.exe filename.png b[binarization] 0.5[binarization threshold:DF]\n"
 		<< "[binarization]\n"
-		<<"[binarization threshold(from 0 to 1-1/255)]\n"
+		<< "[binarization threshold(from 0 to 1-1/255)]\n"
 		<< '\n'
 		<< "./pngProcessor.exe filename.png q[quaternization] 0.5[quaternization threshold:DF]\n"
 		<< "[quaternization]\n"
@@ -668,9 +683,16 @@ void ImageProcessingTools::help()
 		<< '\n'
 		<< "./pngProcessor.exe filename.png s[sharpen] 4.0[sharpen ratio:DF]\n"
 		<< "[sharpen]\n"
-		<< "[sharpen ratio(from 0.2 to 16.0)]\n"
+		<< "[sharpen ratio(from 1 to 500)]\n"
 		<< '\n'
-		<< "./pngProcessor.exe filename.png c[cut] 1024[Horizontal size] 1024[Vertical size]\n" 
+		<< "./pngProcessor.exe filename.png C[cut horizon] 1024[Vertical Interval:DF]\n"
+		<< "[cut horizon]\n"
+		<< "[Vertical Interval(>0)]"
+		<< '\n'
+		<< "./pngProcessor.exe filename.png c[cut] 1024[Horizontal Interval:DF] 1024[Vertical Interval:DF]\n"
+		<< "[cut]\n"
+		<< "[Horizontal Interval(>0)]\n"
+		<< "[Vertical Interval(>0)]\n"
 		<< std::endl;
 }
 
@@ -710,6 +732,9 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 	float32_t centerWeight = 0.64f;
 	uint32_t exponent = (uint32_t)ImageProcessingTools::Exponent::square;
 
+	uint32_t interval_horizontal = 1024u;
+	uint32_t interval_vertical = 1024u;
+
 	switch (mode)
 	{
 	case (int)Mode::zoom:
@@ -736,7 +761,27 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 
 		std::cout << "Input exponent factor:" << exponent << '\n';
 		Clamp(exponent, 1, 4);
-		std::cout << "Adoption exponent factor:" << exponent << '\n';
+		std::cout << "Adoption exponent factor:";
+		
+		if (exponent == 1)
+		{
+			std::cout << "Half\n";
+		}
+		else
+			if (exponent == 2)
+			{
+				std::cout << "One\n";
+			}
+			else
+				if (exponent == 3)
+				{
+					std::cout << "Square\n";
+				}
+				else
+					if (exponent == 4)
+					{
+						std::cout << "Quartet\n";
+					}
 
 		ImageProcessingTools::zoomProgramDefault(Ratio, pngfile, centerWeight, (ImageProcessingTools::Exponent)exponent);
 		break;
@@ -747,7 +792,7 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 
 	case (int)Mode::sharpen:
 	case (int)Mode::Sharpen:
-		Ratio = 1.0f;
+		Ratio = 16.0f;
 		if (argCount > 3)
 		{
 			iss.clear();
@@ -755,12 +800,6 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 			iss >> Ratio;
 		}
 		ImageProcessingTools::sharpenProgram(Ratio, pngfile);
-		break;
-
-	case (int)Mode::cut:
-	case (int)Mode::Cut:
-		std::cout << "function call not designed!" << std::endl;
-		exit(0);
 		break;
 
 	case (int)Mode::toneMapping:
@@ -798,7 +837,7 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 			iss >> Ratio;
 		}
 
-		ImageProcessingTools::VividnessAdjustmentColorProgram(Ratio, pngfile);
+		ImageProcessingTools::vividnessAdjustmentColorProgram(Ratio, pngfile);
 		break;
 
 	case (int)Mode::binarization:
@@ -811,7 +850,7 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 			iss.str(argValues[3]);
 			iss >> Ratio;
 		}
-		ImageProcessingTools::BinarizationColorProgram(Ratio, pngfile);
+		ImageProcessingTools::binarizationColorProgram(Ratio, pngfile);
 		break;
 
 	case (int)Mode::quaternization:
@@ -824,12 +863,38 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 			iss.str(argValues[3]);
 			iss >> Ratio;
 		}
-		ImageProcessingTools::QuaternizationColorProgram(Ratio,pngfile);
+		ImageProcessingTools::quaternizationColorProgram(Ratio,pngfile);
 		break;
 
 	case (int)Mode::hexadecimalization:
 	case (int)Mode::Hexadecimalization:
-		ImageProcessingTools::HexadecimalizationColorProgram(pngfile);
+		ImageProcessingTools::hexadecimalizationColorProgram(pngfile);
+		break;
+
+	case (int)Mode::cut:
+		if (argCount > 3)
+		{
+			iss.clear();
+			iss.str(argValues[3]);
+			iss >> interval_horizontal;
+		}
+		if (argCount > 4)
+		{
+			iss.clear();
+			iss.str(argValues[4]);
+			iss >> interval_vertical;
+		}
+		ImageProcessingTools::blockSplit(interval_horizontal, interval_vertical, pngfile);
+		break;
+
+	case (int)Mode::Cut:
+		if (argCount > 3)
+		{
+			iss.clear();
+			iss.str(argValues[3]);
+			iss >> interval_vertical;
+		}
+		ImageProcessingTools::fastSplitHorizonProgram(interval_vertical, pngfile);
 		break;
 
 	default:
@@ -847,7 +912,8 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 
 void ImageProcessingTools::zoomProgramDefault(float32_t& zoomRatio, std::filesystem::path& pngfile,float32_t& CenterWeight,const Exponent& exponent)
 {
-	std::cout << "Input zoom factor:" << zoomRatio << '\n';
+	std::cout << "Zoom:\n"
+		<<"Input zoom factor:" << zoomRatio << '\n';
 
 	Clamp(zoomRatio, 0.001f, 32.0f);
 	std::cout << "Adoption zoom factor:" << zoomRatio << '\n';
@@ -890,7 +956,7 @@ void ImageProcessingTools::zoomProgramDefault(float32_t& zoomRatio, std::filesys
 		image.clear();
 
 		std::wstring resultname;
-		resultname.append(pngfile.parent_path()).append(L"\\").append(pngfile.stem())
+		resultname.append(pngfile.parent_path()).append(L"/").append(pngfile.stem())
 			.append(L"_zoom_x").append(std::to_wstring(zoomRatio))
 			.append(L"_centerWeight_").append(std::to_wstring(CenterWeight))
 			.append(L"_Exponent_Mode_").append(std::to_wstring((uint32_t)exponent))
@@ -916,11 +982,12 @@ void ImageProcessingTools::zoomProgramDefault(float32_t& zoomRatio, std::filesys
 
 void ImageProcessingTools::sharpenProgram(float32_t& sharpenRatio, std::filesystem::path& pngfile)
 {
-	std::cout << "Input sharpen factor:" << sharpenRatio << '\n' << std::endl;
+	std::cout << "Sharpen:\n" 
+		<< "Input sharpen factor:" << sharpenRatio << '\n' << std::endl;
 
-	Clamp(sharpenRatio, 0.2f, 16.0f);
+	Clamp(sharpenRatio, 1.0f, 500.0f);
 
-	std::cout << "Adoption sharpen factor:" << sharpenRatio << '\n'
+	std::cout << "Adoption sharpen factor:" << sharpenRatio << "%\n"
 		<< "Start processing . . ." << std::endl;
 
 	PngData image, result;
@@ -931,7 +998,7 @@ void ImageProcessingTools::sharpenProgram(float32_t& sharpenRatio, std::filesyst
 		image.clear();
 
 		std::wstring resultname;
-		resultname.append(pngfile.parent_path()).append(L"\\").append(pngfile.stem())
+		resultname.append(pngfile.parent_path()).append(L"/").append(pngfile.stem())
 			.append(L"_sharpen_x").append(std::to_wstring(sharpenRatio))
 			.append(pngfile.extension());
 
@@ -955,7 +1022,8 @@ void ImageProcessingTools::sharpenProgram(float32_t& sharpenRatio, std::filesyst
 
 void ImageProcessingTools::hdrToneMappingColorProgram(float32_t& lumRatio, std::filesystem::path& pngfile)
 {
-	std::cout << "Input lumming factor:" << lumRatio << '\n' << std::endl;
+	std::cout << "ToneMapping:\n"
+		<< "Input lumming factor:" << lumRatio << '\n' << std::endl;
 
 	Clamp(lumRatio, 0.1f, 16.0f);
 
@@ -968,7 +1036,7 @@ void ImageProcessingTools::hdrToneMappingColorProgram(float32_t& lumRatio, std::
 	if (ImageProcessingTools::AecsHdrToneMapping(image, lumRatio))
 	{
 		std::wstring resultname;
-		resultname.append(pngfile.parent_path()).append(L"\\").append(pngfile.stem())
+		resultname.append(pngfile.parent_path()).append(L"/").append(pngfile.stem())
 			.append(L"_toneMapping_x").append(std::to_wstring(lumRatio))
 			.append(pngfile.extension());
 
@@ -1000,7 +1068,7 @@ void ImageProcessingTools::reverseColorProgram(std::filesystem::path& pngfile)
 	if (ImageProcessingTools::ReverseColorImage(image))
 	{
 		std::wstring resultname;
-		resultname.append(pngfile.parent_path()).append(L"\\").append(pngfile.stem())
+		resultname.append(pngfile.parent_path()).append(L"/").append(pngfile.stem())
 			.append(L"_reverse")
 			.append(pngfile.extension());
 
@@ -1034,7 +1102,7 @@ void ImageProcessingTools::grayColorProgram(std::filesystem::path& pngfile)
 		image.clear();
 
 		std::wstring resultname;
-		resultname.append(pngfile.parent_path()).append(L"\\").append(pngfile.stem())
+		resultname.append(pngfile.parent_path()).append(L"/").append(pngfile.stem())
 			.append(L"_gray")
 			.append(pngfile.extension());
 
@@ -1067,15 +1135,15 @@ void ImageProcessingTools::channelGrayColorProgram(std::filesystem::path& pngfil
 		std::wstring resultnameG;
 		std::wstring resultnameB;
 
-		resultnameR.append(pngfile.parent_path()).append(L"\\").append(pngfile.stem())
+		resultnameR.append(pngfile.parent_path()).append(L"/").append(pngfile.stem())
 			.append(L"_Red_gray")
 			.append(pngfile.extension());
 
-		resultnameG.append(pngfile.parent_path()).append(L"\\").append(pngfile.stem())
+		resultnameG.append(pngfile.parent_path()).append(L"/").append(pngfile.stem())
 			.append(L"_Green_gray")
 			.append(pngfile.extension());
 
-		resultnameB.append(pngfile.parent_path()).append(L"\\").append(pngfile.stem())
+		resultnameB.append(pngfile.parent_path()).append(L"/").append(pngfile.stem())
 			.append(L"_Blue_gray")
 			.append(pngfile.extension());
 
@@ -1103,9 +1171,10 @@ void ImageProcessingTools::channelGrayColorProgram(std::filesystem::path& pngfil
 	}
 }
 
-void ImageProcessingTools::VividnessAdjustmentColorProgram(float32_t& VividRatio, std::filesystem::path& pngfile)
+void ImageProcessingTools::vividnessAdjustmentColorProgram(float32_t& VividRatio, std::filesystem::path& pngfile)
 {
-	std::cout << "Input Vivid factor:" << VividRatio << '\n' << std::endl;
+	std::cout << "VividnessAdjustment:\n"
+		<<"Input Vivid factor:" << VividRatio << '\n' << std::endl;
 
 	Clamp(VividRatio, -1.0f, 254.0f);
 
@@ -1119,7 +1188,7 @@ void ImageProcessingTools::VividnessAdjustmentColorProgram(float32_t& VividRatio
 	if (ImageProcessingTools::VividnessAdjustment(image,VividRatio))
 	{
 		std::wstring resultname;
-		resultname.append(pngfile.parent_path()).append(L"\\").append(pngfile.stem())
+		resultname.append(pngfile.parent_path()).append(L"/").append(pngfile.stem())
 			.append(L"_vivid_x").append(std::to_wstring(VividRatio))
 			.append(pngfile.extension());
 
@@ -1140,9 +1209,10 @@ void ImageProcessingTools::VividnessAdjustmentColorProgram(float32_t& VividRatio
 	}
 }
 
-void ImageProcessingTools::BinarizationColorProgram(float32_t& threshold, std::filesystem::path& pngfile)
+void ImageProcessingTools::binarizationColorProgram(float32_t& threshold, std::filesystem::path& pngfile)
 {
-	std::cout << "Input threshold factor:" << threshold << '\n' << std::endl;
+	std::cout << "Binarization:\n"
+		<<"Input threshold factor:" << threshold << '\n' << std::endl;
 
 	Clamp(threshold, 0.0f, 1.0f - ColorPixTofloat);
 
@@ -1157,7 +1227,7 @@ void ImageProcessingTools::BinarizationColorProgram(float32_t& threshold, std::f
 		image.clear();
 
 		std::wstring resultname;
-		resultname.append(pngfile.parent_path()).append(L"\\").append(pngfile.stem())
+		resultname.append(pngfile.parent_path()).append(L"/").append(pngfile.stem())
 			.append(L"_binarization_").append(std::to_wstring(threshold))
 			.append(pngfile.extension());
 
@@ -1170,9 +1240,10 @@ void ImageProcessingTools::BinarizationColorProgram(float32_t& threshold, std::f
 	}
 }
 
-void ImageProcessingTools::QuaternizationColorProgram(float32_t& threshold,std::filesystem::path& pngfile)
+void ImageProcessingTools::quaternizationColorProgram(float32_t& threshold,std::filesystem::path& pngfile)
 {
-	std::cout << "Input threshold factor:" << threshold << '\n' << std::endl;
+	std::cout << "Quaternization:\n"
+		<<"Input threshold factor:" << threshold << '\n' << std::endl;
 
 	Clamp(threshold, 0.0f, 1.0f);
 
@@ -1187,7 +1258,7 @@ void ImageProcessingTools::QuaternizationColorProgram(float32_t& threshold,std::
 		image.clear();
 
 		std::wstring resultname;
-		resultname.append(pngfile.parent_path()).append(L"\\").append(pngfile.stem())
+		resultname.append(pngfile.parent_path()).append(L"/").append(pngfile.stem())
 			.append(L"_quaternization_").append(std::to_wstring(threshold))
 			.append(pngfile.extension());
 
@@ -1200,7 +1271,7 @@ void ImageProcessingTools::QuaternizationColorProgram(float32_t& threshold,std::
 	}
 }
 
-void ImageProcessingTools::HexadecimalizationColorProgram(std::filesystem::path& pngfile)
+void ImageProcessingTools::hexadecimalizationColorProgram(std::filesystem::path& pngfile)
 {
 	std::cout << "Hexadecimalization:\n"
 		<< "Start processing . . ." << std::endl;
@@ -1213,11 +1284,187 @@ void ImageProcessingTools::HexadecimalizationColorProgram(std::filesystem::path&
 		image.clear();
 
 		std::wstring resultname;
-		resultname.append(pngfile.parent_path()).append(L"\\").append(pngfile.stem())
+		resultname.append(pngfile.parent_path()).append(L"/").append(pngfile.stem())
 			.append(L"_hexadecimalization")
 			.append(pngfile.extension());
 
 		exportFile(result.image.data(), result.width, result.height, resultname, LodePNGColorType::LCT_GREY);
+	}
+	else
+	{
+		std::cout << "Something wrong in convert." << std::endl;
+		exit(0);
+	}
+}
+
+void ImageProcessingTools::fastSplitHorizonProgram(uint32_t& splitInterval, std::filesystem::path& pngfile)
+{
+	std::cout << "FastSplitHorizon:\n"
+		<< "Input split interval factor:" << splitInterval << '\n' << std::endl;
+
+	if (splitInterval == 0u)
+		splitInterval = 128u;
+
+	std::cout << "Adoption split interval factor:" << splitInterval << '\n'
+		<< "Start processing . . ." << std::endl;
+
+	PngData image;
+	importFile(image, pngfile);
+
+	if (image.image.size() != 0u)
+	{
+		uint32_t splitNum = std::ceil(float64_t(image.height) / float64_t(splitInterval));
+
+		if (splitNum == 1u)
+		{
+			std::cout << "Wrong size, cannot be split." << std::endl;
+			exit(0);
+		}
+
+		size_t byteSplitInterval = (static_cast<size_t>(image.width) * splitInterval) << 2;
+
+		std::vector<std::unique_ptr<std::thread>> allthreads;
+		
+		allthreads.reserve(splitNum);
+
+		auto exportSplitSlice = [&image](const byte* result, uint32_t height, std::wstring resultName)
+		{
+			ImageProcessingTools::exportFile(result, image.width, height, resultName);
+		};
+
+		std::wstring resultnamepart;
+
+		resultnamepart.append(pngfile.parent_path()).append(L"/").append(pngfile.stem())
+			.append(L"_splitHorizon_slice_");
+
+		for (size_t Current = 0u, currentSlice = 1u; Current < image.image.size(); Current += byteSplitInterval, ++currentSlice)
+		{
+			std::wstring thisName;
+			thisName.append(resultnamepart).append(std::to_wstring(currentSlice)).append(pngfile.extension());
+
+			if ((Current + byteSplitInterval) < image.image.size())
+			{
+				allthreads.push_back(std::make_unique<std::thread>(exportSplitSlice, image.image.data() + Current, splitInterval, thisName));
+			}
+			else
+				if ((image.image.size() - Current) > 0u)
+				{
+					allthreads.push_back(std::make_unique<std::thread>(exportSplitSlice, image.image.data() + Current, image.height % splitInterval, thisName));
+				}
+		}
+
+		for (auto& thread : allthreads)
+		{
+			if (thread->joinable())
+				thread->join();
+		}
+	}
+	else
+	{
+		std::cout << "Something wrong in convert." << std::endl;
+		exit(0);
+	}
+}
+
+void ImageProcessingTools::blockSplit(uint32_t& horizontalInterval, uint32_t& verticalInterval, std::filesystem::path& pngfile)
+{
+	std::cout << "BlockSplit:\n"
+		<< "Input horizontal interval factor:" << horizontalInterval << '\n'
+		<< "Input  vertical  interval factor:" << verticalInterval << '\n' << std::endl;
+
+	if (horizontalInterval == 0u)
+		horizontalInterval = 128u;
+	if (verticalInterval == 0u)
+		verticalInterval = 128u;
+
+	std::cout << "Adoption horizontal interval factor:" << horizontalInterval << '\n'
+		<< "Adoption vertical interval factor:" << horizontalInterval << '\n'
+		<< "Start processing . . ." << std::endl;
+
+	PngData image;
+	importFile(image, pngfile);
+
+	if (image.image.size() != 0u)
+	{
+		uint32_t horizontalSplitNum = std::ceil(float64_t(image.width) / float64_t(horizontalInterval));
+		uint32_t verticalSplitNum = std::ceil(float64_t(image.height) / float64_t(verticalInterval));
+
+		if (horizontalSplitNum == 1u && verticalSplitNum == 1u)
+		{
+			std::cout << "Wrong size, cannot be split." << std::endl;
+			exit(0);
+		}
+
+		std::vector<uint32_t>widths(horizontalSplitNum);
+		std::vector<uint32_t>heights(verticalSplitNum);
+
+		for (auto& w : widths)
+			w = horizontalInterval;
+
+		for (auto& h : heights)
+			h = verticalInterval;
+
+		if ((image.width % horizontalInterval) > 0u)
+			widths.back() = image.width % horizontalInterval;
+		if ((image.height % verticalInterval) > 0u)
+			heights.back() = image.height % verticalInterval;
+
+		std::vector<std::vector<byte>>LineBlocks(horizontalSplitNum);
+		//to ensure space is enough
+		for (auto& blocks : LineBlocks)
+			blocks.reserve(static_cast<size_t>(horizontalInterval) * verticalInterval << 2u);
+
+		std::vector<std::unique_ptr<std::thread>> allthreads;
+
+		allthreads.resize(horizontalSplitNum);
+
+		size_t byteOffset = 0u;
+
+		auto exportSplitSlice = [](const byte* result, uint32_t width, uint32_t height, std::wstring resultName)
+		{
+			ImageProcessingTools::exportFile(result, width, height, resultName);
+		};
+
+		std::wstring resultnamepart;
+
+		resultnamepart.append(pngfile.parent_path()).append(L"/").append(pngfile.stem())
+			.append(L"_slice_");
+
+		const auto& data = image.image.data();
+
+		for (uint32_t y = 0u; y < verticalSplitNum; ++y)
+		{
+			for (uint32_t i = 0u; i < heights[y]; ++i)
+			{
+				for (uint32_t x = 0u; x < horizontalSplitNum; ++x)
+				{
+					size_t size = LineBlocks[x].size();
+					LineBlocks[x].resize(size + (static_cast<size_t>(widths[x]) << 2u));
+
+					std::copy((data + byteOffset), (data + byteOffset) + (static_cast<size_t>(widths[x]) << 2u), LineBlocks[x].begin() + size);
+					byteOffset += (static_cast<size_t>(widths[x]) << 2u);
+				}
+			}
+
+			for (uint32_t x = 0u; x < horizontalSplitNum; ++x)
+			{
+				std::wstring thisName;
+				thisName.append(resultnamepart)
+					.append(L"V").append(std::to_wstring(y + 1)).append(L"_")
+					.append(L"H").append(std::to_wstring(x + 1)).append(pngfile.extension());
+
+				allthreads[x] = std::make_unique<std::thread>(exportSplitSlice, LineBlocks[x].data(), widths[x], heights[y], thisName);
+			}
+
+			for (auto& thread : allthreads)
+			{
+				if (thread->joinable())
+					thread->join();
+			}
+
+			for (auto& blocks : LineBlocks)
+				blocks.clear();
+		}
 	}
 	else
 	{
