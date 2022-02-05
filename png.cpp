@@ -38,17 +38,6 @@ bool ImageProcessingTools::Zoom_DefaultSampling4x4(PngData& input, PngData& resu
 	auto& resultRGBA = result.getRGBA_uint8();
 	resultRGBA.resize(static_cast<size_t>(result.width) * result.height);
 
-	/*float32_t center = CenterWeight * 0.25f;
-	float32_t outer = (1.0f - CenterWeight) / 12.0f;
-
-	const float32_t kernel[4][4]
-	{
-		{outer,outer,outer,outer},
-		{outer,center,center,outer},
-		{outer,center,center,outer},
-		{outer,outer,outer,outer}
-	};*/
-
 	float32_t center    = CenterWeight * 0.250f;
 	float32_t outerNear = (1.0f - CenterWeight) * 0.0910628715f;
 	float32_t outerFar  = (1.0f - CenterWeight) * 0.0678742569f;
@@ -150,7 +139,117 @@ bool ImageProcessingTools::Zoom_DefaultSampling4x4(PngData& input, PngData& resu
 	return true;
 }
 
-bool ImageProcessingTools::Sharpen3x3(PngData& input, PngData& result,const float32_t& strength)
+bool ImageProcessingTools::Zoom_CubicConvolutionSampling4x4(PngData& input, PngData& result, const float32_t& magnification, const float32_t& a)
+{
+	if (input.getRGBA_uint8().size() == 0)//Handle it well, otherwise there will be problems in parallel
+		return false;
+
+	result.width = input.width * magnification;
+	result.height = input.height * magnification;
+
+	float32_t scaleIndex = 1.0f / magnification;
+
+	auto& resultRGBA = result.getRGBA_uint8();
+	resultRGBA.resize(static_cast<size_t>(result.width) * result.height);
+
+#if WINDOWS_SYSTEM_CPU_PARALLEL
+	concurrency::parallel_for(0u, result.height, [&result, &input,&a, &scaleIndex](uint32_t Y) {
+#else
+	CppParallelAccelerator accelerator;
+	std::queue<uint32_t> param;
+
+	for (auto Y = 0u; Y < result.height; ++Y) {
+#endif
+
+		auto GetFloorIndex = [&scaleIndex](const uint32_t& index)
+		{
+			return static_cast<int32_t>(floorf(index * scaleIndex));
+		};
+
+#if !WINDOWS_SYSTEM_CPU_PARALLEL
+		auto CalculateARowOfPixels = [&result, &input,&a, &GetFloorIndex, &scaleIndex](uint32_t Y)
+		{
+			if (Y >= result.height)return;
+#endif
+			auto Formula = ImageProcessingTools::cubicConvolutionZoomFormula;
+
+			auto Row = GetFloorIndex(Y);
+
+			for (auto X = 0u; X < result.width; ++X)
+			{
+
+				auto Column = GetFloorIndex(X);
+
+				float32_t dx = X * scaleIndex - Column;
+				float32_t dy = Y * scaleIndex - Row;
+
+				//Construct the weight matrix
+				floatVec4 kernelX[4];
+				floatVec4 kernelY[4];
+
+				//Pay attention to the high and low
+				kernelX[0] = floatVec4(Formula(a, 2.0f - dx),Formula(a, 1.0f - dx),Formula(a, 0.0f - dx),Formula(a, -1.0f - dx));
+				kernelX[1] = kernelX[0];
+				kernelX[2] = kernelX[0];
+				kernelX[3] = kernelX[0];
+
+				kernelY[0] = floatVec4(Formula(a, -1.0f - dy));
+				kernelY[1] = floatVec4(Formula(a,  0.0f - dy));
+				kernelY[2] = floatVec4(Formula(a,  1.0f - dy));
+				kernelY[3] = floatVec4(Formula(a,  2.0f - dy));
+
+				kernelX[0] *= kernelY[0];
+				kernelX[1] *= kernelY[1];
+				kernelX[2] *= kernelY[2];
+				kernelX[3] *= kernelY[3];
+
+				const auto& kernel = kernelX;
+
+				// Unrolling loops to enhance performance
+				RGBAColor_32f rgba_f(0.0f, 0.0f, 0.0f, 0.0f);
+
+				rgba_f += RGBAColor_32f(input(Column + (-1), Row + (-1)), kernel[0][0]);
+				rgba_f += RGBAColor_32f(input(Column + ( 0), Row + (-1)), kernel[0][1]);
+				rgba_f += RGBAColor_32f(input(Column + ( 1), Row + (-1)), kernel[0][2]);
+				rgba_f += RGBAColor_32f(input(Column + ( 2), Row + (-1)), kernel[0][3]);
+
+				rgba_f += RGBAColor_32f(input(Column + (-1), Row + (0)), kernel[1][0]);
+				rgba_f += RGBAColor_32f(input(Column + ( 0), Row + (0)), kernel[1][1]);
+				rgba_f += RGBAColor_32f(input(Column + ( 1), Row + (0)), kernel[1][2]);
+				rgba_f += RGBAColor_32f(input(Column + ( 2), Row + (0)), kernel[1][3]);
+
+				rgba_f += RGBAColor_32f(input(Column + (-1), Row + (1)), kernel[2][0]);
+				rgba_f += RGBAColor_32f(input(Column + ( 0), Row + (1)), kernel[2][1]);
+				rgba_f += RGBAColor_32f(input(Column + ( 1), Row + (1)), kernel[2][2]);
+				rgba_f += RGBAColor_32f(input(Column + ( 2), Row + (1)), kernel[2][3]);
+
+				rgba_f += RGBAColor_32f(input(Column + (-1), Row + (2)), kernel[3][0]);
+				rgba_f += RGBAColor_32f(input(Column + ( 0), Row + (2)), kernel[3][1]);
+				rgba_f += RGBAColor_32f(input(Column + ( 1), Row + (2)), kernel[3][2]);
+				rgba_f += RGBAColor_32f(input(Column + ( 2), Row + (2)), kernel[3][3]);
+
+				result(X, Y) = rgba_f.toRGBAColor_8i();
+			}
+#if WINDOWS_SYSTEM_CPU_PARALLEL
+		});
+#else
+};
+
+		// numberOfExecutionThreads threads
+		for (auto i = 0; i < accelerator.GetNumThreads(); i++)
+		{
+			param.push(Y + i);
+		}
+		Y += (accelerator.GetNumThreads() - 1);
+
+		accelerator.Run(CalculateARowOfPixels, param);
+		accelerator.Join();
+	}
+#endif // !WINDOWS_SYSTEM_CPU_PARALLEL
+	return true;
+}
+
+bool ImageProcessingTools::SharpenLaplace3x3(PngData& input, PngData& result,const float32_t& strength)
 {
 	if (input.getRGBA_uint8().size() == 0)//Handle it well, otherwise there will be problems in parallel
 		return false;
@@ -164,49 +263,174 @@ bool ImageProcessingTools::Sharpen3x3(PngData& input, PngData& result,const floa
 	float32_t factor = -0.01f * strength;
 	constexpr float32_t oneHalfRoot = 0.70710678f;
 	constexpr float32_t oneHalfRootPlusOne = oneHalfRoot + 1.0f;
+	
+	/*
+		kernel = 
+		{
+		  -sqrt(0.5) -1 -sqrt(0.5)
+		  -1       -outers	-1
+		  -sqrt(0.5) -1 -sqrt(0.5)
+		}
+	
+	*/
 
-	const float32_t kernel[3][3]
-	{
-		{ factor * oneHalfRoot ,factor								        ,factor * oneHalfRoot },
-		{ factor               ,1.0f - (4.0f * oneHalfRootPlusOne) * factor ,factor				 },
-		{ factor * oneHalfRoot ,factor								        ,factor * oneHalfRoot }
-	};
+	const float32_t& outerNear = factor;
+	const float32_t outerFar = factor * oneHalfRoot;
+	const float32_t center = 1.0f - (4.0f * oneHalfRootPlusOne) * factor;
 
 #if WINDOWS_SYSTEM_CPU_PARALLEL
-	concurrency::parallel_for(0u, result.height,[&result, &input, &kernel](uint32_t Y){
+	concurrency::parallel_for(0u, result.height,[&result, &input,&outerNear,&outerFar,&center](uint32_t Y){
 #else
 	CppParallelAccelerator accelerator;
 	std::queue<uint32_t> param;
 
 	for (auto Y = 0u; Y < result.height; ++Y) {
 
-		auto CalculateARowOfPixels = [&result, &input, &kernel](uint32_t Y)
+		auto CalculateARowOfPixels = [&result, &input, &outerNear, &outerFar, &center](uint32_t Y)
 		{
 
 			if (Y >= result.height)return;
 #endif
 			for (auto X = 0u; X < result.width; ++X)
 			{
-				RGBAColor_32f rgba_f(0.0f, 0.0f, 0.0f, 0.0f);
 
-				rgba_f += RGBAColor_32f(input(X - 1, Y - 1),kernel[0][0]);
-				rgba_f += RGBAColor_32f(input(X + 0, Y - 1),kernel[0][1]);
-				rgba_f += RGBAColor_32f(input(X + 1, Y - 1),kernel[0][2]);
+				RGBAColor_32f rgba_f1(0.0f, 0.0f, 0.0f, 0.0f);
+				RGBAColor_32f rgba_f2(0.0f, 0.0f, 0.0f, 0.0f);
 
-				rgba_f += RGBAColor_32f(input(X - 1, Y + 0),kernel[1][0]);
-				rgba_f += RGBAColor_32f(input(X + 0, Y + 0),kernel[1][1]);
-				rgba_f += RGBAColor_32f(input(X + 1, Y + 0),kernel[1][2]);
+				rgba_f1 += RGBAColor_32f(input(X - 1, Y - 1));
+				rgba_f1 += RGBAColor_32f(input(X + 1, Y - 1));
+				rgba_f1 += RGBAColor_32f(input(X - 1, Y + 1));
+				rgba_f1 += RGBAColor_32f(input(X + 1, Y + 1));
 
-				rgba_f += RGBAColor_32f(input(X - 1, Y + 1),kernel[2][0]);
-				rgba_f += RGBAColor_32f(input(X + 0, Y + 1),kernel[2][1]);
-				rgba_f += RGBAColor_32f(input(X + 1, Y + 1),kernel[2][2]);
+				rgba_f2 += RGBAColor_32f(input(X + 0, Y - 1));
+				rgba_f2 += RGBAColor_32f(input(X - 1, Y + 0));
+				rgba_f2 += RGBAColor_32f(input(X + 1, Y + 0));
+				rgba_f2 += RGBAColor_32f(input(X + 0, Y + 1));
 
-				result(X, Y) = rgba_f.toRGBAColor_8i();
+				rgba_f1 *= outerFar;
+				rgba_f2 *= outerNear;
+
+				rgba_f1 += RGBAColor_32f(input(X + 0, Y + 0), center);
+				rgba_f1 += rgba_f2;
+
+				result(X, Y) = rgba_f1.toRGBAColor_8i();
 			}
 #if WINDOWS_SYSTEM_CPU_PARALLEL
 			});
 #else
 		};
+
+		// numberOfExecutionThreads threads
+		for (auto i = 0; i < accelerator.GetNumThreads(); i++)
+		{
+			param.push(Y + i);
+		}
+		Y += (accelerator.GetNumThreads() - 1);
+
+		accelerator.Run(CalculateARowOfPixels, param);
+		accelerator.Join();
+
+		}
+#endif // !WINDOWS_SYSTEM_CPU_PARALLEL	
+	return true;
+}
+
+bool ImageProcessingTools::SharpenGaussLaplace5x5(PngData& input, PngData& result, const float32_t& strength)
+{
+	if (input.getRGBA_uint8().size() == 0)//Handle it well, otherwise there will be problems in parallel
+		return false;
+
+	result.width = input.width;
+	result.height = input.height;
+
+	auto& resultRGBA = result.getRGBA_uint8();
+	resultRGBA.resize(static_cast<size_t>(result.width) * result.height);
+
+	float32_t factor = -0.002f * strength;
+	/*
+		kernel = 
+		{
+		-2 -4 -4 -4 -2
+		-4  0  8  0 -4
+		-4  8  24 8 -4
+		-4  0  8  0 -4
+		-2 -4 -4 -4 -2
+		}
+
+		kernel =
+		{
+		-1 -2 -2 -2 -1
+		-2  0  4  0 -2
+		-2  4  12 4 -2
+		-2  0  4  0 -2
+		-1 -2 -2 -2 -1
+		}
+	*/
+	
+	const float32_t &outerl2Far = factor;
+	const float32_t outerl2Near = 2.0f * factor;
+	const float32_t outerl1Near = -4.0f * factor;
+	//const float32_t outerl1Far = 0.0f;
+	const float32_t center = 1.0f - 12.0f * factor;
+
+#if WINDOWS_SYSTEM_CPU_PARALLEL
+	concurrency::parallel_for(0u, result.height, [&result, &input, &outerl2Far, &outerl2Near,&outerl1Near, &center](uint32_t Y) {
+#else
+	CppParallelAccelerator accelerator;
+	std::queue<uint32_t> param;
+
+	for (auto Y = 0u; Y < result.height; ++Y) {
+
+		auto CalculateARowOfPixels = [&result, &input, &outerl2Far, &outerl2Near, &outerl1Near, &center](uint32_t Y)
+		{
+
+			if (Y >= result.height)return;
+#endif
+
+			for (auto X = 0u; X < result.width; ++X)
+			{
+				RGBAColor_32f rgba_f1(0.0f, 0.0f, 0.0f, 0.0f);
+				RGBAColor_32f rgba_f2(0.0f, 0.0f, 0.0f, 0.0f);
+				RGBAColor_32f rgba_f3(0.0f, 0.0f, 0.0f, 0.0f);
+
+				rgba_f1 += RGBAColor_32f(input(X - 2, Y - 2));
+				rgba_f1 += RGBAColor_32f(input(X + 2, Y - 2));
+				rgba_f1 += RGBAColor_32f(input(X - 2, Y + 2));
+				rgba_f1 += RGBAColor_32f(input(X + 2, Y + 2));
+
+				rgba_f2 += RGBAColor_32f(input(X - 1, Y - 2));
+				rgba_f2 += RGBAColor_32f(input(X + 0, Y - 2));
+				rgba_f2 += RGBAColor_32f(input(X + 1, Y - 2));
+				rgba_f2 += RGBAColor_32f(input(X - 2, Y - 1));
+				rgba_f2 += RGBAColor_32f(input(X - 2, Y + 0));
+				rgba_f2 += RGBAColor_32f(input(X - 2, Y + 1));
+				rgba_f2 += RGBAColor_32f(input(X + 2, Y - 1));
+				rgba_f2 += RGBAColor_32f(input(X + 2, Y + 0));
+				rgba_f2 += RGBAColor_32f(input(X + 2, Y + 1));
+				rgba_f2 += RGBAColor_32f(input(X - 1, Y + 2));
+				rgba_f2 += RGBAColor_32f(input(X + 0, Y + 2));
+				rgba_f2 += RGBAColor_32f(input(X + 1, Y + 2));
+
+				rgba_f3 += RGBAColor_32f(input(X + 0, Y - 1));
+				rgba_f3 += RGBAColor_32f(input(X - 1, Y + 0));
+				rgba_f3 += RGBAColor_32f(input(X + 1, Y + 0));
+				rgba_f3 += RGBAColor_32f(input(X + 0, Y + 1));
+
+				rgba_f1 *= outerl2Far;
+				rgba_f2 *= outerl2Near;
+				rgba_f3 *= outerl1Near;
+
+				rgba_f1 += RGBAColor_32f(input(X + 0, Y + 0), center);
+				rgba_f1 += rgba_f2;
+				rgba_f1 += rgba_f3;
+
+				result(X, Y) = rgba_f1.toRGBAColor_8i();
+			}
+
+#if WINDOWS_SYSTEM_CPU_PARALLEL
+		});
+#else
+};
 
 		// numberOfExecutionThreads threads
 		for (auto i = 0; i < accelerator.GetNumThreads(); i++)
@@ -632,19 +856,21 @@ void ImageProcessingTools::help()
 	std::cout << "Check Help Info.\n\n"
 		<< "Help:[---] is a prompt, not an input.[DF] means it has a default value.\n"
 		<< "Startup parameters-->\n"
-		<< "[    default zoom    ]: z     \n"
-		<< "[    bicubic zoom    ]: Z       [Feature not currently supported]\n"
-		<< "[       sharpen      ]: s or S\n"
-		<< "[    tone mapping    ]: t or T\n"
-		<< "[     gray scale     ]: g     \n"
-		<< "[ channle gray scale ]: G     \n"
-		<< "[    reverse color   ]: r or R\n"
-		<< "[    binarization    ]: b or B\n"
-		<< "[   quaternization   ]: q or Q\n"
-		<< "[ hexadecimalization ]: h or H\n"
-		<< "[vividness Adjustment]: v or V\n"
-		<< "[         cut        ]: c     \n"
-		<< "[     cut horizon    ]: C     \n"
+		<< "[    Default Zoom    ]: z     \n"
+		<< "[    Bicubic Zoom    ]: Z     \n"
+		<< "[   Laplace Sharpen  ]: s     \n"
+		<< "[GaussLaplace Sharpen]: S     \n"
+		<< "[    Tone Mapping    ]: t or T\n"
+		<< "[     Gray Scale     ]: g     \n"
+		<< "[ Channle Gray Scale ]: G     \n"
+		<< "[    Reverse Color   ]: r or R\n"
+		<< "[    Binarization    ]: b or B\n"
+		<< "[   Quaternization   ]: q or Q\n"
+		<< "[ Hexadecimalization ]: h or H\n"
+		<< "[Vividness Adjustment]: v or V\n"
+		<< "[      Block Cut     ]: c     \n"
+		<< "[     Cut horizon    ]: C     \n"
+		<< "[       Mosaic       ]: m       [Feature not currently supported]\n"
 		<< '\n'
 		<< "Input Sample-->\n"
 		<< "./pngProcessor.exe filename.png z[default zoom] 1.0[zoom ratio:DF] 0.5[center weight:DF] 2[Exponent:DF]\n"
@@ -652,6 +878,11 @@ void ImageProcessingTools::help()
 		<< "[zoom ratio(from 0.001 to 32.0)]\n"
 		<< "[center weight(from 0.25 to 13.0, 0.25:similar to MSAAx16, 1.0 : similar to bilinear, >1:sharp)]\n"
 		<< "[Exponent(from 1 to 4:0.5, 1.0, 2.0, 4.0)]\n"
+		<< '\n'
+		<< "./pngProcessor.exe filename.png z[bicubic zoom] -1.0[formula factor:DF]\n"
+		<< "[bicubic zoom]\n"
+		<< "[zoom ratio(from 0.001 to 32.0)]\n"
+		<< "[formula factor(from -3.0 to -0.1)]\n"
 		<< '\n'
 		<< "./pngProcessor.exe filename.png t[tone mapping] 2.0[lumming ratio:DF]\n"
 		<< "[tone mapping]\n"
@@ -681,9 +912,13 @@ void ImageProcessingTools::help()
 		<< "./pngProcessor.exe filename.png r[reverse color]\n"
 		<< "[reverse color]\n"
 		<< '\n'
-		<< "./pngProcessor.exe filename.png s[sharpen] 4.0[sharpen ratio:DF]\n"
-		<< "[sharpen]\n"
-		<< "[sharpen ratio(from 1 to 500)]\n"
+		<< "./pngProcessor.exe filename.png s[laplace sharpen] 4.0[sharpen ratio:DF]\n"
+		<< "[laplace sharpen]\n"
+		<< "[sharpen ratio(from 1 to 1000)]\n"
+		<< '\n'
+		<< "./pngProcessor.exe filename.png S[gauss-laplace sharpen] 4.0[sharpen ratio:DF]\n"
+		<< "[gauss-laplace sharpen]\n"
+		<< "[sharpen ratio(from 1 to 1000)]\n"
 		<< '\n'
 		<< "./pngProcessor.exe filename.png C[cut horizon] 1024[Vertical Interval:DF]\n"
 		<< "[cut horizon]\n"
@@ -729,7 +964,7 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 	iss >> mode;
 
 	float32_t Ratio = 1.0f;
-	float32_t centerWeight = 0.64f;
+	float32_t Weight = 0.64f;
 	uint32_t exponent = (uint32_t)ImageProcessingTools::Exponent::square;
 
 	uint32_t interval_horizontal = 1024u;
@@ -748,7 +983,7 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 			{
 				iss.clear();
 				iss.str(argValues[4]);
-				iss >> centerWeight;
+				iss >> Weight;
 
 				if (argCount > 5)
 				{
@@ -783,23 +1018,46 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 						std::cout << "Quartet\n";
 					}
 
-		ImageProcessingTools::zoomProgramDefault(Ratio, pngfile, centerWeight, (ImageProcessingTools::Exponent)exponent);
+		ImageProcessingTools::zoomProgramDefault(Ratio, pngfile, Weight, (ImageProcessingTools::Exponent)exponent);
 		break;
 	case (int)Mode::Zoom:
-		std::cout << "function call not designed!" << std::endl;
-		exit(0);
+		Weight = -0.5f;
+		if (argCount > 3)
+		{
+			iss.clear();
+			iss.str(argValues[3]);
+			iss >> Ratio;
+
+			if (argCount > 4)
+			{
+				iss.clear();
+				iss.str(argValues[4]);
+				iss >> Weight;
+			}
+		}
+		ImageProcessingTools::zoomProgramCubicConvolution(Ratio, pngfile, Weight);
 		break;
 
 	case (int)Mode::sharpen:
-	case (int)Mode::Sharpen:
-		Ratio = 16.0f;
+		Ratio = 15.0f;
 		if (argCount > 3)
 		{
 			iss.clear();
 			iss.str(argValues[3]);
 			iss >> Ratio;
 		}
-		ImageProcessingTools::sharpenProgram(Ratio, pngfile);
+		ImageProcessingTools::laplaceSharpenProgram(Ratio, pngfile);
+		break;
+
+	case (int)Mode::Sharpen:
+		Ratio = 15.0f;
+		if (argCount > 3)
+		{
+			iss.clear();
+			iss.str(argValues[3]);
+			iss >> Ratio;
+		}
+		ImageProcessingTools::gaussLaplaceSharpenProgram(Ratio, pngfile);
 		break;
 
 	case (int)Mode::toneMapping:
@@ -912,7 +1170,7 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 
 void ImageProcessingTools::zoomProgramDefault(float32_t& zoomRatio, std::filesystem::path& pngfile,float32_t& CenterWeight,const Exponent& exponent)
 {
-	std::cout << "Zoom:\n"
+	std::cout << "Zoom Default:\n"
 		<<"Input zoom factor:" << zoomRatio << '\n';
 
 	Clamp(zoomRatio, 0.001f, 32.0f);
@@ -980,12 +1238,59 @@ void ImageProcessingTools::zoomProgramDefault(float32_t& zoomRatio, std::filesys
 	}
 }
 
-void ImageProcessingTools::sharpenProgram(float32_t& sharpenRatio, std::filesystem::path& pngfile)
+void ImageProcessingTools::zoomProgramCubicConvolution(float32_t& zoomRatio, std::filesystem::path& pngfile, float32_t& a)
 {
-	std::cout << "Sharpen:\n" 
+	std::cout << "Zoom Cubic:\n"
+		<< "Input zoom factor:" << zoomRatio << '\n';
+
+	Clamp(zoomRatio, 0.001f, 32.0f);
+	std::cout << "Adoption zoom factor:" << zoomRatio << '\n';
+
+	std::cout << "Input formula factor:" << a << '\n';
+
+	Clamp(a, -3.0f, -0.1f);
+
+	std::cout << "Adoption formula factor:" << a << '\n'
+		<< "Start processing . . ." << std::endl;
+
+
+	PngData image, result;
+	importFile(image, pngfile);
+
+	if (ImageProcessingTools::Zoom_CubicConvolutionSampling4x4(image, result, zoomRatio, a))
+	{
+		image.clear();
+
+		std::wstring resultname;
+		resultname.append(pngfile.parent_path()).append(L"/").append(pngfile.stem())
+			.append(L"_Zoom_x").append(std::to_wstring(zoomRatio))
+			.append(L"_cubicFactor_").append(std::to_wstring(a))
+			.append(pngfile.extension());
+
+#if LITTLE_ENDIAN
+		exportFile(reinterpret_cast<byte*>(result.getRGBA_uint8().data()), result.width, result.height, resultname);
+
+#else
+		//load result into stream to save to file
+		result.loadRGBAtoByteStream();
+		result.clearRGBA_uint8();
+
+		exportFile(result, resultname);
+#endif
+	}
+	else
+	{
+		std::cout << "Something wrong in convert." << std::endl;
+		exit(0);
+	}
+}
+
+void ImageProcessingTools::laplaceSharpenProgram(float32_t& sharpenRatio, std::filesystem::path& pngfile)
+{
+	std::cout << "Laplace Sharpen:\n" 
 		<< "Input sharpen factor:" << sharpenRatio << '\n' << std::endl;
 
-	Clamp(sharpenRatio, 1.0f, 500.0f);
+	Clamp(sharpenRatio, 1.0f, 1000.0f);
 
 	std::cout << "Adoption sharpen factor:" << sharpenRatio << "%\n"
 		<< "Start processing . . ." << std::endl;
@@ -993,13 +1298,53 @@ void ImageProcessingTools::sharpenProgram(float32_t& sharpenRatio, std::filesyst
 	PngData image, result;
 	importFile(image, pngfile);
 
-	if (ImageProcessingTools::Sharpen3x3(image, result, sharpenRatio))
+	if (ImageProcessingTools::SharpenLaplace3x3(image, result, sharpenRatio))
 	{
 		image.clear();
 
 		std::wstring resultname;
 		resultname.append(pngfile.parent_path()).append(L"/").append(pngfile.stem())
-			.append(L"_sharpen_x").append(std::to_wstring(sharpenRatio))
+			.append(L"_L_sharpen_x").append(std::to_wstring(sharpenRatio))
+			.append(pngfile.extension());
+
+#if LITTLE_ENDIAN
+		exportFile(reinterpret_cast<byte*>(result.getRGBA_uint8().data()), result.width, result.height, resultname);
+
+#else
+		//load result into stream to save to file
+		result.loadRGBAtoByteStream();
+		result.clearRGBA_uint8();
+
+		exportFile(result, resultname);
+#endif
+	}
+	else
+	{
+		std::cout << "Something wrong in convert." << std::endl;
+		exit(0);
+	}
+}
+
+void ImageProcessingTools::gaussLaplaceSharpenProgram(float32_t& sharpenRatio, std::filesystem::path& pngfile)
+{
+	std::cout << "Gauss-Laplace Sharpen:\n"
+		<< "Input sharpen factor:" << sharpenRatio << '\n' << std::endl;
+
+	Clamp(sharpenRatio, 1.0f, 1000.0f);
+
+	std::cout << "Adoption sharpen factor:" << sharpenRatio << "%\n"
+		<< "Start processing . . ." << std::endl;
+
+	PngData image, result;
+	importFile(image, pngfile);
+
+	if (ImageProcessingTools::SharpenGaussLaplace5x5(image, result, sharpenRatio))
+	{
+		image.clear();
+
+		std::wstring resultname;
+		resultname.append(pngfile.parent_path()).append(L"/").append(pngfile.stem())
+			.append(L"_GL_sharpen_x").append(std::to_wstring(sharpenRatio))
 			.append(pngfile.extension());
 
 #if LITTLE_ENDIAN

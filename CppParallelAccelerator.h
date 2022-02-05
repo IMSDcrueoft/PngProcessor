@@ -8,6 +8,8 @@
 #include <thread>
 #include <queue>
 
+#define DEBUG false
+
 class CppParallelAccelerator
 {
 
@@ -33,8 +35,13 @@ protected:
 
 inline CppParallelAccelerator::CppParallelAccelerator()
 {
+#if !DEBUG
 	uint32_t numberOfExecutionThreads = (std::thread::hardware_concurrency() + 1) >> 1;
 	numberOfExecutionThreads = (numberOfExecutionThreads > 6) ? numberOfExecutionThreads : 6;
+#else
+	uint32_t numberOfExecutionThreads = 1;
+#endif
+
 	allThreads.resize(numberOfExecutionThreads);
 }
 

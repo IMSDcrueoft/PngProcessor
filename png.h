@@ -50,7 +50,7 @@ so you should also comply with the requirements of its header declaration
 
 #ifndef OPERATING_SYSTEM
 #define OPERATING_SYSTEM
-#define WINDOWS_SYSTEM_CPU_PARALLEL true
+#define WINDOWS_SYSTEM_CPU_PARALLEL false
 #endif//OPERATING_SYSTEM
 
 #if WINDOWS_SYSTEM_CPU_PARALLEL
@@ -183,8 +183,9 @@ struct alignas(16) RGBAColor_32f
 			float32_t Z;
 			float32_t W;
 		};
-	};
 
+		alignas(16) float32_t arr[4];
+	};
 protected:
 	RGBAColor_32f(const __m128& vec4);
 
@@ -214,6 +215,8 @@ public:
 	RGBAColor_32f& operator-=(const RGBAColor_32f& nextColor);
 	RGBAColor_32f& operator*=(const RGBAColor_32f& nextColor);
 	RGBAColor_32f& operator/=(const RGBAColor_32f& nextColor);
+
+	const float32_t& operator[](const uint32_t& index) const;
 
 	RGBAColor_8i toRGBAColor_8i();
 
@@ -268,9 +271,7 @@ protected:
 	static void ACESToneMappingColor(RGBAColor_32f& color, const float32_t& adapted_lum);
 
 protected:
-	static float32_t approximateFormula(const float32_t& a, const float32_t& x);
-	static float32_t ordinaryFormula(const float32_t& x);
-	static float32_t CubicHermiteSplines(const float32_t& x);
+	static float32_t cubicConvolutionZoomFormula(const float32_t& a, const float32_t& x);
 
 	static void weightEffectAdapt(const float32_t& dx, const float32_t& dy, floatVec4& weightResult, float32_t(*Index)(const float32_t&));
 	static void weightEffectHalf(const float32_t& dx, const float32_t& dy, floatVec4& weightResult);
@@ -283,7 +284,9 @@ public:
 	static void commandStartUps(int32_t argCount,STR argValues[]);
 
 	static void zoomProgramDefault(float32_t& zoomRatio, std::filesystem::path& pngfile,float32_t& CenterWeight,const Exponent& exponent = Exponent::one);
-	static void sharpenProgram(float32_t& sharpenRatio, std::filesystem::path& pngfile);
+	static void zoomProgramCubicConvolution(float32_t& zoomRatio, std::filesystem::path& pngfile, float32_t& a);
+	static void laplaceSharpenProgram(float32_t& sharpenRatio, std::filesystem::path& pngfile);
+	static void gaussLaplaceSharpenProgram(float32_t& sharpenRatio, std::filesystem::path& pngfile);
 	static void hdrToneMappingColorProgram(float32_t& lumRatio, std::filesystem::path& pngfile);
 	static void reverseColorProgram(std::filesystem::path& pngfile);
 	static void grayColorProgram(std::filesystem::path& pngfile);
@@ -307,7 +310,10 @@ public:
 	static bool Zoom_DefaultSampling4x4(PngData& input, PngData& result, const float32_t& magnification = 1.0f, const float32_t& CenterWeight = 0.64f,
 		void (*WeightEffact)(const float32_t& dx, const float32_t& dy,floatVec4& weightResult) = ImageProcessingTools::weightEffectSquare);
 
-	static bool Sharpen3x3(PngData& input, PngData& result, const float32_t& strength = 1.0f);
+	static bool Zoom_CubicConvolutionSampling4x4(PngData& input, PngData& result, const float32_t& magnification = 1.0f, const float32_t& a = -0.5f);
+
+	static bool SharpenLaplace3x3(PngData& input, PngData& result, const float32_t& strength = 1.0f);
+	static bool SharpenGaussLaplace5x5(PngData& input, PngData& result, const float32_t& strength = 1.0f);
 	static bool AecsHdrToneMapping(PngData& inputOutput,const float32_t& lumRatio = 1.0f);
 	static bool ReverseColorImage(PngData& inputOutput);
 	static bool Grayscale(PngData& input, PngData& result);
@@ -494,6 +500,13 @@ inline RGBAColor_32f& RGBAColor_32f::operator/=(const RGBAColor_32f& nextColor)
 {
 	this->float32X4 = _mm_div_ps(this->float32X4, nextColor.float32X4);
 	return *this;
+}
+
+inline const float32_t& RGBAColor_32f::operator[](const uint32_t& index)const
+{
+	assert(0u <= index && index < 4u && "Index out of range.");
+
+	return this->arr[index];
 }
 
 inline RGBAColor_8i RGBAColor_32f::toRGBAColor_8i()
@@ -786,8 +799,10 @@ inline void ImageProcessingTools::ACESToneMappingColor(RGBAColor_32f& color, con
 	color.A = Alpha;
 }
 
-inline float32_t ImageProcessingTools::approximateFormula(const float32_t& a, const float32_t& x)
+inline float32_t ImageProcessingTools::cubicConvolutionZoomFormula(const float32_t& a, const float32_t& x)
 {
+	// -3 <= a <= -0.1
+	// -2 <= x <= 2
 	float32_t absX = fabsf(x);
 
 	if (absX <= 1.0f)
@@ -811,16 +826,6 @@ inline float32_t ImageProcessingTools::approximateFormula(const float32_t& a, co
 		{
 			return 0.0f;
 		}
-}
-
-inline float32_t ImageProcessingTools::ordinaryFormula(const float32_t& x)
-{
-	return sinf(pi * x) / (pi * x);
-}
-
-inline float32_t ImageProcessingTools::CubicHermiteSplines(const float32_t& x)
-{
-	return approximateFormula(-0.5f, x);
 }
 
 inline void ImageProcessingTools::weightEffectAdapt(const float32_t& dx, const float32_t& dy, floatVec4& weightResult, float32_t(*Index)(const float32_t&))
