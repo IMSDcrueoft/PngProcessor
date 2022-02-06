@@ -124,10 +124,10 @@ struct alignas(4) RGBAColor_8i
 	};
 
 	RGBAColor_8i() = default;
-	RGBAColor_8i(byte* ptr);
-	RGBAColor_8i(unknown_pointer ptr);
-	RGBAColor_8i(const uint8_t& color);
-	RGBAColor_8i(const uint8_t& R, const uint8_t& G, const uint8_t& B, const uint8_t& A = 0xFF);
+	explicit RGBAColor_8i(byte* ptr);
+	explicit RGBAColor_8i(unknown_pointer ptr);
+	explicit RGBAColor_8i(const uint8_t& color);
+	explicit RGBAColor_8i(const uint8_t& R, const uint8_t& G, const uint8_t& B, const uint8_t& A = 0xFF);
 
 	RGBAColor_8i& operator=(const uint32_t& rgba);
 	RGBAColor_8i operator*(const int32_t& num);
@@ -191,10 +191,10 @@ protected:
 
 public:
 	RGBAColor_32f();
-	RGBAColor_32f(const float32_t& val);
-	RGBAColor_32f(const float32_t& r, const float32_t& g, const float32_t& b, const float32_t& a = 1.0f);
-	RGBAColor_32f(const RGBAColor_8i& color);
-	RGBAColor_32f(const RGBAColor_8i& color,const float32_t& multNum);
+	explicit RGBAColor_32f(const float32_t& val);
+	explicit RGBAColor_32f(const float32_t& r, const float32_t& g, const float32_t& b, const float32_t& a = 1.0f);
+	explicit RGBAColor_32f(const RGBAColor_8i& color);
+	explicit RGBAColor_32f(const RGBAColor_8i& color,const float32_t& multNum);
 
 	RGBAColor_32f operator+(const float32_t& num) const;
 	RGBAColor_32f operator-(const float32_t& num) const;
@@ -238,26 +238,28 @@ public:
 
 	enum class Mode :char
 	{
-		zoom = 'z',
-		Zoom = 'Z',
-		sharpen = 's',
-		Sharpen = 'S',
-		cut = 'c',
-		Cut = 'C',
-		toneMapping = 't',
-		ToneMapping = 'T',
-		grayScale = 'g',
-		GrayScale = 'G',
-		reverseColor = 'r',
-		ReverseColor = 'R',
-		vividness = 'v',
-		Vividness = 'V',
 		binarization = 'b',
 		Binarization = 'B',
-		quaternization = 'q',
-		Quaternization = 'Q',
+		cut = 'c',
+		Cut = 'C',
+		filter = 'f',
+		Filter = 'F',
+		grayScale = 'g',
+		GrayScale = 'G',
 		hexadecimalization = 'h',
 		Hexadecimalization = 'H',
+		quaternization = 'q',
+		Quaternization = 'Q',
+		reverseColor = 'r',
+		ReverseColor = 'R',
+		sharpen = 's',
+		Sharpen = 'S',
+		toneMapping = 't',
+		ToneMapping = 'T',
+		vividness = 'v',
+		Vividness = 'V',
+		zoom = 'z',
+		Zoom = 'Z',
 		unknown = '?'
 	};
 
@@ -296,7 +298,8 @@ public:
 	static void quaternizationColorProgram(float32_t& threshold, std::filesystem::path& pngfile);
 	static void hexadecimalizationColorProgram(std::filesystem::path& pngfile);
 	static void fastSplitHorizonProgram(uint32_t& splitInterval, std::filesystem::path& pngfile);
-	static void blockSplit(uint32_t& horizontalInterval,uint32_t& verticalInterval, std::filesystem::path& pngfile);
+	static void blockSplitProgram(uint32_t& horizontalInterval,uint32_t& verticalInterval, std::filesystem::path& pngfile);
+	static void surfaceBlurfilterProgram(float32_t& threshold, std::filesystem::path& pngfile, int32_t& radius);
 
 	//The following three methods rely on lodepng
 	static void importFile(PngData& data, std::filesystem::path& pngfile);
@@ -322,6 +325,7 @@ public:
 	static bool Binarization(PngData& input, PngData& result, const float32_t& threshold = 0.5f);
 	static bool Quaternization(PngData& input, PngData& result, const float32_t& threshold = 0.5f);
 	static bool Hexadecimalization(PngData& input, PngData& result);
+	static bool SurfaceBlur(PngData& input, PngData& result, const int32_t& radius = 1, const float32_t& threshold = 0.5f);
 };
 
 

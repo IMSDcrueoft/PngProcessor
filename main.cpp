@@ -92,15 +92,16 @@ int main(int argc, char* argv[])
 	clockTimer timer;
 	timer.TimerStart();
 
-	float32_t Ratio = 2.0f;
+	int32_t radius = 1;
+	float32_t Ratio = 0.5f;
 	float32_t Weight = -1;
-	pngfile = "D:/pics/4K.png";
+	pngfile = "D:/pics/0JCT(AV2_1SOJA%@6UFH$HA.png";
 	//uint32_t exponent = (uint32_t)ImageProcessingTools::Exponent::one;
 
-	ImageProcessingTools::zoomProgramCubicConvolution(Ratio, pngfile, Weight);
+	ImageProcessingTools::surfaceBlurfilterProgram(Ratio, pngfile, radius);
 	/*uint32_t x = 1920;
 	uint32_t y = 1080;
-	ImageProcessingTools::blockSplit(x, y, pngfile);*/
+	ImageProcessingTools::blockSplitProgram(x, y, pngfile);*/
 
 	timer.TimerStop();
 	std::cout << "Time use:" << timer.getTime();

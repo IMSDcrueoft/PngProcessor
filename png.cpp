@@ -791,6 +791,97 @@ bool ImageProcessingTools::Hexadecimalization(PngData& input, PngData& result)
 	return true;
 }
 
+bool ImageProcessingTools::SurfaceBlur(PngData& input, PngData& result, const int32_t& radius, const float32_t& threshold)
+{
+	if (input.getRGBA_uint8().size() == 0)//Handle it well, otherwise there will be problems in parallel
+		return false;
+
+	result.width = input.width;
+	result.height = input.height;
+
+	auto& resultRGBA = result.getRGBA_uint8();
+	resultRGBA.resize(input.getRGBA_uint8().size());
+
+	uint32_t sideLength = (radius << 1u) + 1u;
+	float32_t denominator = 0.40f / threshold;
+
+#if WINDOWS_SYSTEM_CPU_PARALLEL
+	concurrency::parallel_for(0u, result.height, [&result, &input, &radius, &denominator,&sideLength](uint32_t Y) {
+#else
+	CppParallelAccelerator accelerator;
+	std::queue<uint32_t> param;
+
+	for (auto Y = 0u; Y < result.height; ++Y) {
+
+		auto CalculateARowOfPixels = [&result, &input, &radius, &denominator, &sideLength](uint32_t Y)
+		{
+
+			if (Y >= result.height)return;
+#endif
+			auto toGray = [](const RGBAColor_32f& rgba_f)
+			{
+				return fabsf((rgba_f.R + rgba_f.G + rgba_f.B) * 0.33333f);
+			};
+
+			for (auto X = 0u; X < result.width; ++X)
+			{
+				//tectonic kernel
+				std::vector <std::vector<float32_t>>kernel(sideLength);
+				for (auto& line : kernel)
+					line.resize(sideLength);
+
+				//buildKernel
+				RGBAColor_32f center = RGBAColor_32f(input(X, Y));
+
+				float32_t sum = 0.0f;
+				RGBAColor_32f pixelSum(0.0f, 0.0f, 0.0f, 0.0f);
+
+				for (int64_t h = -radius; h <= radius; ++h)
+				{
+					for (int64_t w = -radius; w <= radius; ++w)
+					{
+						RGBAColor_32f pixel = RGBAColor_32f(input(X + w, Y + h));
+						pixel -= center;
+
+						 kernel[h + radius][w + radius] = 1.0f - (toGray(pixel) * denominator);
+
+						 sum += kernel[h + radius][w + radius];
+					}
+				}
+
+				for (int64_t h = -radius; h <= radius; ++h)
+				{
+					for (int64_t w = -radius; w <= radius; ++w)
+					{
+						pixelSum += RGBAColor_32f(input(X + w, Y + h), kernel[h + radius][w + radius]);
+					}
+				}
+
+				pixelSum /= sum;
+				pixelSum.A = center.A;
+
+				result(X, Y) = pixelSum.toRGBAColor_8i();
+			}
+#if WINDOWS_SYSTEM_CPU_PARALLEL
+		});
+#else
+};
+
+		// numberOfExecutionThreads threads
+		for (auto i = 0; i < accelerator.GetNumThreads(); i++)
+		{
+			param.push(Y + i);
+		}
+		Y += (accelerator.GetNumThreads() - 1);
+
+		accelerator.Run(CalculateARowOfPixels, param);
+		accelerator.Join();
+
+		}
+#endif // !WINDOWS_SYSTEM_CPU_PARALLEL	
+	return true;
+}
+
 void ImageProcessingTools::importFile(PngData& data, std::filesystem::path& pngfile)
 {
 	auto path = AdaptString::toString(pngfile.wstring());
@@ -863,6 +954,7 @@ void ImageProcessingTools::help()
 		<< "[    Tone Mapping    ]: t or T\n"
 		<< "[     Gray Scale     ]: g     \n"
 		<< "[ Channle Gray Scale ]: G     \n"
+		<< "[ Surface Blur Filter]: F     \n"
 		<< "[    Reverse Color   ]: r or R\n"
 		<< "[    Binarization    ]: b or B\n"
 		<< "[   Quaternization   ]: q or Q\n"
@@ -969,6 +1061,8 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 
 	uint32_t interval_horizontal = 1024u;
 	uint32_t interval_vertical = 1024u;
+
+	int32_t radius = 1;
 
 	switch (mode)
 	{
@@ -1135,14 +1229,15 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 			iss.clear();
 			iss.str(argValues[3]);
 			iss >> interval_horizontal;
+
+			if (argCount > 4)
+			{
+				iss.clear();
+				iss.str(argValues[4]);
+				iss >> interval_vertical;
+			}
 		}
-		if (argCount > 4)
-		{
-			iss.clear();
-			iss.str(argValues[4]);
-			iss >> interval_vertical;
-		}
-		ImageProcessingTools::blockSplit(interval_horizontal, interval_vertical, pngfile);
+		ImageProcessingTools::blockSplitProgram(interval_horizontal, interval_vertical, pngfile);
 		break;
 
 	case (int)Mode::Cut:
@@ -1153,6 +1248,23 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 			iss >> interval_vertical;
 		}
 		ImageProcessingTools::fastSplitHorizonProgram(interval_vertical, pngfile);
+		break;
+
+	case (int)Mode::Filter:
+		if (argCount > 3)
+		{
+			iss.clear();
+			iss.str(argValues[3]);
+			iss >> Ratio;
+
+			if (argCount > 4)
+			{
+				iss.clear();
+				iss.str(argValues[4]);
+				iss >> radius;
+			}
+		}
+		ImageProcessingTools::surfaceBlurfilterProgram(Ratio, pngfile, radius);
 		break;
 
 	default:
@@ -1711,7 +1823,7 @@ void ImageProcessingTools::fastSplitHorizonProgram(uint32_t& splitInterval, std:
 	}
 }
 
-void ImageProcessingTools::blockSplit(uint32_t& horizontalInterval, uint32_t& verticalInterval, std::filesystem::path& pngfile)
+void ImageProcessingTools::blockSplitProgram(uint32_t& horizontalInterval, uint32_t& verticalInterval, std::filesystem::path& pngfile)
 {
 	std::cout << "BlockSplit:\n"
 		<< "Input horizontal interval factor:" << horizontalInterval << '\n'
@@ -1810,6 +1922,53 @@ void ImageProcessingTools::blockSplit(uint32_t& horizontalInterval, uint32_t& ve
 			for (auto& blocks : LineBlocks)
 				blocks.clear();
 		}
+	}
+	else
+	{
+		std::cout << "Something wrong in convert." << std::endl;
+		exit(0);
+	}
+}
+
+void ImageProcessingTools::surfaceBlurfilterProgram(float32_t& threshold, std::filesystem::path& pngfile, int32_t& radius)
+{
+	std::cout << "Surface Blur Filter:\n"
+		<< "Input blur factor:" << threshold << '\n' << std::endl;
+
+	Clamp(threshold, ColorPixTofloat, 1.0f);
+
+	std::cout << "Adoption blur factor:" << threshold << '\n';
+
+	std::cout<< "Input radius factor:" << radius << '\n' << std::endl;
+
+	Clamp(radius, 1u, 12u);
+
+	std::cout << "Adoption radius factor:" << radius << '\n'
+		<< "Start processing . . ." << std::endl;
+
+	PngData image, result;
+	importFile(image, pngfile);
+
+	if (ImageProcessingTools::SurfaceBlur(image, result,radius,threshold))
+	{
+		image.clear();
+
+		std::wstring resultname;
+		resultname.append(pngfile.parent_path()).append(L"/").append(pngfile.stem())
+			.append(L"_surfaceBlur_").append(std::to_wstring(threshold))
+			.append(L"_radius_").append(std::to_wstring(radius))
+			.append(pngfile.extension());
+
+#if LITTLE_ENDIAN
+		exportFile(reinterpret_cast<byte*>(result.getRGBA_uint8().data()), result.width, result.height, resultname);
+
+#else
+		//load result into stream to save to file
+		result.loadRGBAtoByteStream();
+		result.clearRGBA_uint8();
+
+		exportFile(result, resultname);
+#endif
 	}
 	else
 	{
