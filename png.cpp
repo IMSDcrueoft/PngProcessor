@@ -1,5 +1,5 @@
 /*
-PNG Processor Version 20220201
+PNG Processor Version 20220206
 
 Copyright (c) 2005-2022 IM&SD
 
