@@ -258,7 +258,7 @@ bool ImageProcessingTools::SharpenLaplace3x3(PngData& input, PngData& result,con
 	result.height = input.height;
 
 	auto& resultRGBA = result.getRGBA_uint8();
-	resultRGBA.resize(static_cast<size_t>(result.width) * result.height);
+	resultRGBA.resize(input.getRGBA_uint8().size());
 
 	float32_t factor = -0.01f * strength;
 	constexpr float32_t oneHalfRoot = 0.70710678f;
@@ -656,6 +656,51 @@ bool ImageProcessingTools::VividnessAdjustment(PngData& inputOutput, const float
 	return true;
 }
 
+bool ImageProcessingTools::NatualVividnessAdjustment(PngData& inputOutput, const float32_t& vividRatio)
+{
+	if (inputOutput.getRGBA_uint8().size() == 0)//Handle it well, otherwise there will be problems in parallel
+		return false;
+
+	//not need this time
+	inputOutput.clearImage();
+
+#if WINDOWS_SYSTEM_CPU_PARALLEL
+	concurrency::parallel_for(0u, inputOutput.height, [&inputOutput, &vividRatio](uint32_t Y) {
+#else
+	CppParallelAccelerator accelerator;
+	std::queue<uint32_t> param;
+
+	for (auto Y = 0u; Y < inputOutput.height; ++Y) {
+
+		auto CalculateARowOfPixels = [&inputOutput, &vividRatio](uint32_t Y) {
+#endif
+			for (auto X = 0u; X < inputOutput.width; ++X)
+			{
+				RGBAColor_32f color(inputOutput(X, Y));
+
+				ImageProcessingTools::NatualVividnessAdjustmentColor(color, vividRatio);
+
+				inputOutput(X, Y) = color.toRGBAColor_8i();
+			}
+
+#if WINDOWS_SYSTEM_CPU_PARALLEL
+		});
+#else
+	};
+		// numberOfExecutionThreads threads
+		for (auto i = 0; i < accelerator.GetNumThreads(); i++)
+		{
+			param.push(Y + i);
+		}
+		Y += (accelerator.GetNumThreads() - 1);
+
+		accelerator.Run(CalculateARowOfPixels, param);
+		accelerator.Join();
+	}
+#endif
+	return true;
+}
+
 bool ImageProcessingTools::Binarization(PngData& input, PngData& result, const float32_t& threshold)
 {
 	if (input.getRGBA_uint8().size() == 0)//Handle it well, otherwise there will be problems in parallel
@@ -882,6 +927,89 @@ bool ImageProcessingTools::SurfaceBlur(PngData& input, PngData& result, const in
 	return true;
 }
 
+bool ImageProcessingTools::SobelEdgeEnhancement(PngData& input, PngData& result, const float32_t& thresholdMin, const float32_t& thresholdMax, const float32_t& strength)
+{
+	if (input.getRGBA_uint8().size() == 0)//Handle it well, otherwise there will be problems in parallel
+		return false;
+
+	result.width = input.width;
+	result.height = input.height;
+
+	auto& resultRGBA = result.getRGBA_uint8();
+	resultRGBA.resize(input.getRGBA_uint8().size());
+
+#if WINDOWS_SYSTEM_CPU_PARALLEL
+	concurrency::parallel_for(0u, result.height, [&result, &input, &thresholdMin, &thresholdMax,&strength](uint32_t Y) {
+#else
+	CppParallelAccelerator accelerator;
+	std::queue<uint32_t> param;
+
+	for (auto Y = 0u; Y < result.height; ++Y) {
+
+		auto CalculateARowOfPixels = [&result, &input, &thresholdMin, &thresholdMax,&strength](uint32_t Y)
+		{
+
+			if (Y >= result.height)return;
+#endif
+			for (auto X = 0u; X < result.width; ++X)
+			{
+				RGBAColor_32f Gx(0.0f, 0.0f, 0.0f, 0.0f);
+				RGBAColor_32f Gy(0.0f, 0.0f, 0.0f, 0.0f);
+
+				Gx += RGBAColor_32f(input(X - 1, Y - 1), -1.0f);
+				Gx += RGBAColor_32f(input(X + 1, Y - 1),  1.0f);
+				Gx += RGBAColor_32f(input(X - 1, Y + 0), -2.0f);
+				Gx += RGBAColor_32f(input(X + 1, Y + 0),  2.0f);
+				Gx += RGBAColor_32f(input(X - 1, Y + 1), -1.0f);
+				Gx += RGBAColor_32f(input(X + 1, Y + 1),  1.0f);
+
+				Gy += RGBAColor_32f(input(X - 1, Y - 1),  1.0f);
+				Gy += RGBAColor_32f(input(X + 0, Y - 1),  2.0f);
+				Gy += RGBAColor_32f(input(X + 1, Y - 1),  1.0f);
+				Gy += RGBAColor_32f(input(X - 1, Y + 1), -1.0f);
+				Gy += RGBAColor_32f(input(X + 0, Y + 1), -2.0f);
+				Gy += RGBAColor_32f(input(X + 1, Y + 1), -1.0f);
+
+				float32_t gx = Gx.R + Gx.G + Gx.B;
+				float32_t gy = Gy.R + Gy.G + Gy.B;
+
+				float32_t G = sqrtf((gx * gx) + (gy * gy)) * 0.33333f;
+
+				if (G < thresholdMin || G > thresholdMax)
+				{
+					G = 1.0f;
+				}
+				else
+				{
+					G *= strength;
+					G = 1.0f - G;
+					Clamp(G, 0.0f, 1.0f);
+				}
+
+				RGBAColor_32f  center(input(X, Y), G);
+
+				result(X, Y) = center.toRGBAColor_8i();
+			}
+#if WINDOWS_SYSTEM_CPU_PARALLEL
+		});
+#else
+	};
+
+		// numberOfExecutionThreads threads
+		for (auto i = 0; i < accelerator.GetNumThreads(); i++)
+		{
+			param.push(Y + i);
+		}
+		Y += (accelerator.GetNumThreads() - 1);
+
+		accelerator.Run(CalculateARowOfPixels, param);
+		accelerator.Join();
+
+}
+#endif // !WINDOWS_SYSTEM_CPU_PARALLEL	
+	return true;
+}
+
 void ImageProcessingTools::importFile(PngData& data, std::filesystem::path& pngfile)
 {
 	auto path = AdaptString::toString(pngfile.wstring());
@@ -954,12 +1082,14 @@ void ImageProcessingTools::help()
 		<< "[    Tone Mapping    ]: t or T\n"
 		<< "[     Gray Scale     ]: g     \n"
 		<< "[ Channle Gray Scale ]: G     \n"
+		<< "[  Sobel Edge Filter ]: f     \n"
 		<< "[ Surface Blur Filter]: F     \n"
 		<< "[    Reverse Color   ]: r or R\n"
 		<< "[    Binarization    ]: b or B\n"
 		<< "[   Quaternization   ]: q or Q\n"
 		<< "[ Hexadecimalization ]: h or H\n"
-		<< "[Vividness Adjustment]: v or V\n"
+		<< "[Vividness Adjustment]: v     \n"
+		<< "[ Natual Vivid Adjust]: V     \n"
 		<< "[      Block Cut     ]: c     \n"
 		<< "[     Cut horizon    ]: C     \n"
 		<< "[       Mosaic       ]: m       [Feature not currently supported]\n"
@@ -971,7 +1101,7 @@ void ImageProcessingTools::help()
 		<< "[center weight(from 0.25 to 13.0, 0.25:similar to MSAAx16, 1.0 : similar to bilinear, >1:sharp)]\n"
 		<< "[Exponent(from 1 to 4:0.5, 1.0, 2.0, 4.0)]\n"
 		<< '\n'
-		<< "./pngProcessor.exe filename.png z[bicubic zoom] -1.0[formula factor:DF]\n"
+		<< "./pngProcessor.exe filename.png Z[bicubic zoom] -1.0[formula factor:DF]\n"
 		<< "[bicubic zoom]\n"
 		<< "[zoom ratio(from 0.001 to 32.0)]\n"
 		<< "[formula factor(from -3.0 to -0.1)]\n"
@@ -1001,6 +1131,10 @@ void ImageProcessingTools::help()
 		<< "[vividness Adjustment]\n"
 		<< "[vivid ratio(from -1.0 to 254.0)]\n"
 		<< '\n'
+		<< "./pngProcessor.exe filename.png V[natual vividness Adjustment] 0.2[vivid ratio:DF]\n"
+		<< "[natual vividness Adjustment]\n"
+		<< "[vivid ratio(from -1.0 to 254.0)]\n"
+		<< '\n'
 		<< "./pngProcessor.exe filename.png r[reverse color]\n"
 		<< "[reverse color]\n"
 		<< '\n'
@@ -1012,14 +1146,25 @@ void ImageProcessingTools::help()
 		<< "[gauss-laplace sharpen]\n"
 		<< "[sharpen ratio(from 1 to 1000)]\n"
 		<< '\n'
-		<< "./pngProcessor.exe filename.png C[cut horizon] 1024[Vertical Interval:DF]\n"
-		<< "[cut horizon]\n"
-		<< "[Vertical Interval(>0)]"
+		<< "./pngProcessor.exe filename.png f[sobel edge enhancement Filter] 0.5[thresholdMix:DF] 1.0f[thresholdMax:DF] 1.0f[edge strength:DF]\n"
+		<< "[surface blur filter]\n"
+		<< "[thresholdMix(from 0 to 1)]\n"
+		<< "[thresholdMax(from 0 to 1)]\n"
+		<< "[Edge strength(from 0.05 to 10)]"
+		<< '\n'
+		<< "./pngProcessor.exe filename.png F[surface blur filter] 0.5[threshold:DF] 2[radius:DF]\n"
+		<< "[surface blur filter]\n"
+		<< "[threshold(from 1/255 to 1)]\n"
+		<< "[radius(from 1 to 12)]\n"
 		<< '\n'
 		<< "./pngProcessor.exe filename.png c[cut] 1024[Horizontal Interval:DF] 1024[Vertical Interval:DF]\n"
 		<< "[cut]\n"
 		<< "[Horizontal Interval(>0)]\n"
 		<< "[Vertical Interval(>0)]\n"
+		<< '\n'
+		<< "./pngProcessor.exe filename.png C[cut horizon] 1024[Vertical Interval:DF]\n"
+		<< "[cut horizon]\n"
+		<< "[Vertical Interval(>0)]"
 		<< std::endl;
 }
 
@@ -1029,6 +1174,16 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 	char mode = (char)Mode::unknown;
 	clockTimer timer;
 	std::istringstream iss;
+
+	auto GetParam = [&iss, &argCount,&argValues](const uint32_t& id, auto& target)
+	{
+		if (argCount > id)
+		{
+			iss.clear();
+			iss.str(argValues[id]);
+			iss >> target;
+		}
+	};
 
 	timer.TimerStart();
 
@@ -1055,8 +1210,9 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 	iss.str(argValues[2]);
 	iss >> mode;
 
-	float32_t Ratio = 1.0f;
-	float32_t Weight = 0.64f;
+	float32_t param1 = 1.0f;
+	float32_t param2 = 0.64f;
+	float32_t param3 = 1.0f;
 	uint32_t exponent = (uint32_t)ImageProcessingTools::Exponent::square;
 
 	uint32_t interval_horizontal = 1024u;
@@ -1067,17 +1223,20 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 	switch (mode)
 	{
 	case (int)Mode::zoom:
-		if (argCount > 3)
+		param1 = 0.5f;
+		param2 = 0.64f;
+
+		/*if (argCount > 3)
 		{
 			iss.clear();
 			iss.str(argValues[3]);
-			iss >> Ratio;
+			iss >> param1;
 
 			if (argCount > 4)
 			{
 				iss.clear();
 				iss.str(argValues[4]);
-				iss >> Weight;
+				iss >> param2;
 
 				if (argCount > 5)
 				{
@@ -1086,7 +1245,10 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 					iss >> exponent;
 				}
 			}
-		}
+		}*/
+		GetParam(3, param1);
+		GetParam(4, param2);
+		GetParam(5, exponent);
 
 		std::cout << "Input exponent factor:" << exponent << '\n';
 		Clamp(exponent, 1, 4);
@@ -1112,57 +1274,70 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 						std::cout << "Quartet\n";
 					}
 
-		ImageProcessingTools::zoomProgramDefault(Ratio, pngfile, Weight, (ImageProcessingTools::Exponent)exponent);
+		ImageProcessingTools::zoomProgramDefault(param1, pngfile, param2, (ImageProcessingTools::Exponent)exponent);
 		break;
+
 	case (int)Mode::Zoom:
-		Weight = -0.5f;
-		if (argCount > 3)
+		param1 = 2.0f;
+		param2 = -0.5f;
+
+		/*if (argCount > 3)
 		{
 			iss.clear();
 			iss.str(argValues[3]);
-			iss >> Ratio;
+			iss >> param1;
 
 			if (argCount > 4)
 			{
 				iss.clear();
 				iss.str(argValues[4]);
-				iss >> Weight;
+				iss >> param2;
 			}
-		}
-		ImageProcessingTools::zoomProgramCubicConvolution(Ratio, pngfile, Weight);
+		}*/
+		GetParam(3, param1);
+		GetParam(4, param2);
+
+		ImageProcessingTools::zoomProgramCubicConvolution(param1, pngfile, param2);
 		break;
 
 	case (int)Mode::sharpen:
-		Ratio = 15.0f;
-		if (argCount > 3)
+		param1 = 15.0f;
+
+		/*if (argCount > 3)
 		{
 			iss.clear();
 			iss.str(argValues[3]);
-			iss >> Ratio;
-		}
-		ImageProcessingTools::laplaceSharpenProgram(Ratio, pngfile);
+			iss >> param1;
+		}*/
+		GetParam(3, param1);
+		ImageProcessingTools::laplaceSharpenProgram(param1, pngfile);
 		break;
 
 	case (int)Mode::Sharpen:
-		Ratio = 15.0f;
-		if (argCount > 3)
-		{
-			iss.clear();
-			iss.str(argValues[3]);
-			iss >> Ratio;
-		}
-		ImageProcessingTools::gaussLaplaceSharpenProgram(Ratio, pngfile);
+		param1 = 15.0f;
+
+		//if (argCount > 3)
+		//{
+		//	iss.clear();
+		//	iss.str(argValues[3]);
+		//	iss >> param1;
+		//}
+		GetParam(3, param1);
+		ImageProcessingTools::gaussLaplaceSharpenProgram(param1, pngfile);
 		break;
 
 	case (int)Mode::toneMapping:
 	case (int)Mode::ToneMapping:
-		if (argCount > 3)
-		{
-			iss.clear();
-			iss.str(argValues[3]);
-			iss >> Ratio;
-		}
-		ImageProcessingTools::hdrToneMappingColorProgram(Ratio, pngfile);
+		param1 = 1.0f;
+
+		//if (argCount > 3)
+		//{
+		//	iss.clear();
+		//	iss.str(argValues[3]);
+		//	iss >> param1;
+		//}
+		GetParam(3, param1);
+		ImageProcessingTools::hdrToneMappingColorProgram(param1, pngfile);
 		break;
 
 	case (int)Mode::grayScale:
@@ -1179,43 +1354,57 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 		break;
 
 	case (int)Mode::vividness:
+		param1 = 0.2f;
+
+		//if (argCount > 3)
+		//{
+		//	iss.clear();
+		//	iss.str(argValues[3]);
+		//	iss >> param1;
+		//}
+		GetParam(3, param1);
+		ImageProcessingTools::vividnessAdjustmentColorProgram(param1, pngfile);
+		break;
+
 	case (int)Mode::Vividness:
-		Ratio = 0.2f;
+		param1 = 0.2f;
 
-		if (argCount > 3)
-		{
-			iss.clear();
-			iss.str(argValues[3]);
-			iss >> Ratio;
-		}
-
-		ImageProcessingTools::vividnessAdjustmentColorProgram(Ratio, pngfile);
+		//if (argCount > 3)
+		//{
+		//	iss.clear();
+		//	iss.str(argValues[3]);
+		//	iss >> param1;
+		//}
+		GetParam(3, param1);
+		ImageProcessingTools::natualvividnessAdjustmentColorProgram(param1, pngfile);
 		break;
 
 	case (int)Mode::binarization:
 	case (int)Mode::Binarization:
-		Ratio = 0.5f;
+		param1 = 0.5f;
 
-		if (argCount > 3)
+		/*if (argCount > 3)
 		{
 			iss.clear();
 			iss.str(argValues[3]);
-			iss >> Ratio;
-		}
-		ImageProcessingTools::binarizationColorProgram(Ratio, pngfile);
+			iss >> param1;
+		}*/
+		GetParam(3, param1);
+		ImageProcessingTools::binarizationColorProgram(param1, pngfile);
 		break;
 
 	case (int)Mode::quaternization:
 	case (int)Mode::Quaternization:
-		Ratio = 0.5f;
+		param1 = 0.5f;
 
-		if (argCount > 3)
+		/*if (argCount > 3)
 		{
 			iss.clear();
 			iss.str(argValues[3]);
-			iss >> Ratio;
-		}
-		ImageProcessingTools::quaternizationColorProgram(Ratio,pngfile);
+			iss >> param1;
+		}*/
+		GetParam(3, param1);
+		ImageProcessingTools::quaternizationColorProgram(param1,pngfile);
 		break;
 
 	case (int)Mode::hexadecimalization:
@@ -1224,7 +1413,7 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 		break;
 
 	case (int)Mode::cut:
-		if (argCount > 3)
+		/*if (argCount > 3)
 		{
 			iss.clear();
 			iss.str(argValues[3]);
@@ -1236,35 +1425,76 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 				iss.str(argValues[4]);
 				iss >> interval_vertical;
 			}
-		}
+		}*/
+		GetParam(3, interval_horizontal);
+		GetParam(4, interval_vertical);
+
 		ImageProcessingTools::blockSplitProgram(interval_horizontal, interval_vertical, pngfile);
 		break;
 
 	case (int)Mode::Cut:
-		if (argCount > 3)
-		{
-			iss.clear();
-			iss.str(argValues[3]);
-			iss >> interval_vertical;
-		}
+		//if (argCount > 3)
+		//{
+		//	iss.clear();
+		//	iss.str(argValues[3]);
+		//	iss >> interval_vertical;
+		//}
+		GetParam(3, interval_vertical);
 		ImageProcessingTools::fastSplitHorizonProgram(interval_vertical, pngfile);
 		break;
 
-	case (int)Mode::Filter:
-		if (argCount > 3)
-		{
-			iss.clear();
-			iss.str(argValues[3]);
-			iss >> Ratio;
+	case (int)Mode::filter:
+		param1 = 0.0f;
+		param2 = 1.0f;
+		param3 = 1.0f;
 
-			if (argCount > 4)
-			{
-				iss.clear();
-				iss.str(argValues[4]);
-				iss >> radius;
-			}
-		}
-		ImageProcessingTools::surfaceBlurfilterProgram(Ratio, pngfile, radius);
+		//if (argCount > 3)
+		//{
+		//	iss.clear();
+		//	iss.str(argValues[3]);
+		//	iss >> param1;
+		//	if (argCount > 4)
+		//	{
+		//		iss.clear();
+		//		iss.str(argValues[4]);
+		//		iss >> param2;
+		//		
+		//		if (argCount > 5)
+		//		{
+		//			iss.clear();
+		//			iss.str(argValues[5]);
+		//			iss >> param3;
+		//		}
+		//	}
+		//}
+		GetParam(3, param1);
+		GetParam(4, param2);
+		GetParam(5, param3);
+
+		ImageProcessingTools::sobelEdgeEnhancementProgram(param3, pngfile, param1, param2);
+		break;
+
+	case (int)Mode::Filter:
+		param1 = 0.5f;
+		radius = 1;
+
+		//if (argCount > 3)
+		//{
+		//	iss.clear();
+		//	iss.str(argValues[3]);
+		//	iss >> param1;
+		//	if (argCount > 4)
+		//	{
+		//		iss.clear();
+		//		iss.str(argValues[4]);
+		//		iss >> radius;
+		//	}
+		//}
+
+		GetParam(3, param1);
+		GetParam(4, radius);
+
+		ImageProcessingTools::surfaceBlurfilterProgram(param1, pngfile, radius);
 		break;
 
 	default:
@@ -1630,13 +1860,13 @@ void ImageProcessingTools::channelGrayColorProgram(std::filesystem::path& pngfil
 
 void ImageProcessingTools::vividnessAdjustmentColorProgram(float32_t& VividRatio, std::filesystem::path& pngfile)
 {
-	std::cout << "VividnessAdjustment:\n"
-		<<"Input Vivid factor:" << VividRatio << '\n' << std::endl;
+	std::cout << "Vividness Adjustment:\n"
+		<< "Input Vivid factor:" << (1.0f + VividRatio) * 100.0f << "%\n" << std::endl;
 
 	Clamp(VividRatio, -1.0f, 254.0f);
 
 
-	std::cout << "Adoption Vivid factor:" << VividRatio << '\n'
+	std::cout << "Adoption Vivid factor:" << (1.0f + VividRatio) * 100.0f << "%\n"
 		<< "Start processing . . ." << std::endl;
 
 	PngData image;
@@ -1647,6 +1877,43 @@ void ImageProcessingTools::vividnessAdjustmentColorProgram(float32_t& VividRatio
 		std::wstring resultname;
 		resultname.append(pngfile.parent_path()).append(L"/").append(pngfile.stem())
 			.append(L"_vivid_x").append(std::to_wstring(VividRatio))
+			.append(pngfile.extension());
+
+#if LITTLE_ENDIAN
+		exportFile(reinterpret_cast<byte*>(image.getRGBA_uint8().data()), image.width, image.height, resultname);
+#else
+		//load result into stream to save to file
+		image.loadRGBAtoByteStream();
+		image.clearRGBA_uint8();
+
+		exportFile(image, resultname);
+#endif
+	}
+	else
+	{
+		std::cout << "Something wrong in convert." << std::endl;
+		exit(0);
+	}
+}
+
+void ImageProcessingTools::natualvividnessAdjustmentColorProgram(float32_t& VividRatio, std::filesystem::path& pngfile)
+{
+	std::cout << "Natual Vividness Adjustment:\n"
+		<< "Input Vivid factor:" << (1.0f + VividRatio) * 100.0f << "%\n" << std::endl;
+
+	Clamp(VividRatio, -1.0f, 1.0f);
+
+	std::cout << "Adoption Vivid factor:" << (1.0f + VividRatio) * 100.0f << "%\n"
+		<< "Start processing . . ." << std::endl;
+
+	PngData image;
+	importFile(image, pngfile);
+
+	if (ImageProcessingTools::NatualVividnessAdjustment(image, VividRatio))
+	{
+		std::wstring resultname;
+		resultname.append(pngfile.parent_path()).append(L"/").append(pngfile.stem())
+			.append(L"_natualVivid_x").append(std::to_wstring(VividRatio))
 			.append(pngfile.extension());
 
 #if LITTLE_ENDIAN
@@ -1957,6 +2224,63 @@ void ImageProcessingTools::surfaceBlurfilterProgram(float32_t& threshold, std::f
 		resultname.append(pngfile.parent_path()).append(L"/").append(pngfile.stem())
 			.append(L"_surfaceBlur_").append(std::to_wstring(threshold))
 			.append(L"_radius_").append(std::to_wstring(radius))
+			.append(pngfile.extension());
+
+#if LITTLE_ENDIAN
+		exportFile(reinterpret_cast<byte*>(result.getRGBA_uint8().data()), result.width, result.height, resultname);
+
+#else
+		//load result into stream to save to file
+		result.loadRGBAtoByteStream();
+		result.clearRGBA_uint8();
+
+		exportFile(result, resultname);
+#endif
+	}
+	else
+	{
+		std::cout << "Something wrong in convert." << std::endl;
+		exit(0);
+	}
+}
+
+void ImageProcessingTools::sobelEdgeEnhancementProgram(float32_t& strength, std::filesystem::path& pngfile, float32_t& thresholdMin, float32_t& thresholdMax)
+{
+	std::cout << "Sobel Edge Enhancement Filter:\n"
+		<< "Input thresholdMin factor:" << thresholdMin << '\n'
+		<< "Input thresholdMax factor:" << thresholdMax << '\n' << std::endl;
+
+	Clamp(thresholdMin, 0.0f, 1.0f);
+	Clamp(thresholdMax, 0.0f, 1.0f);
+
+	if (thresholdMin >= thresholdMax)
+	{
+		thresholdMin = 0.0f;
+		thresholdMax = 1.0f;
+	}
+
+	std::cout << "Adoption thresholdMin factor:" << thresholdMin << '\n'
+		<< "Adoption thresholdMax factor:" << thresholdMax << '\n';
+
+	std::cout << "Input strength factor:" << (strength) * 100.0f << "%\n";
+
+	Clamp(strength, 0.05f, 10.0f);
+
+	std::cout << "Adoption strength factor:" << (strength) * 100.0f << "%\n"
+		<< "Start processing . . ." << std::endl;
+
+	PngData image, result;
+	importFile(image, pngfile);
+
+	if (ImageProcessingTools::SobelEdgeEnhancement(image, result, thresholdMin, thresholdMax, strength))
+	{
+		image.clear();
+
+		std::wstring resultname;
+		resultname.append(pngfile.parent_path()).append(L"/").append(pngfile.stem())
+			.append(L"_sobelEdge_min_").append(std::to_wstring(thresholdMin))
+			.append(L"_max_").append(std::to_wstring(thresholdMax))
+			.append(L"_strength_").append(std::to_wstring(strength))
 			.append(pngfile.extension());
 
 #if LITTLE_ENDIAN

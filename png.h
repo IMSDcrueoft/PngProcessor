@@ -85,6 +85,18 @@ static constexpr float32_t pi = 3.1415926f;
 static constexpr float32_t maxColorPix = 255.0f;
 static constexpr float32_t ColorPixTofloat = (1.0f / maxColorPix);
 
+auto Max = [](const auto& left, const auto& right)
+{
+	if (left > right)
+	{
+		return left;
+	}
+	else
+	{
+		return right;
+	}
+};
+
 auto Clamp = [](auto& val, const auto& min, const auto& max)
 {
 	assert((min) < (max) && "wrong! min is larger than max in Clamp.");
@@ -270,6 +282,7 @@ protected:
 	static void HexadecimalizationColor(const RGBAColor_8i& color, byte& result);//16 colors are rich enough, no need for thresholding anymore
 	static void ReverseColor(RGBAColor_8i& color);
 	static void VividnessAdjustmentColor(RGBAColor_32f& color,const float32_t& changeMagnification);
+	static void NatualVividnessAdjustmentColor(RGBAColor_32f& color, const float32_t& changeMagnification);
 	static void ACESToneMappingColor(RGBAColor_32f& color, const float32_t& adapted_lum);
 
 protected:
@@ -294,12 +307,14 @@ public:
 	static void grayColorProgram(std::filesystem::path& pngfile);
 	static void channelGrayColorProgram(std::filesystem::path& pngfile);
 	static void vividnessAdjustmentColorProgram(float32_t& VividRatio,std::filesystem::path& pngfile);
+	static void natualvividnessAdjustmentColorProgram(float32_t& VividRatio, std::filesystem::path& pngfile);
 	static void binarizationColorProgram(float32_t& threshold, std::filesystem::path& pngfile);
 	static void quaternizationColorProgram(float32_t& threshold, std::filesystem::path& pngfile);
 	static void hexadecimalizationColorProgram(std::filesystem::path& pngfile);
 	static void fastSplitHorizonProgram(uint32_t& splitInterval, std::filesystem::path& pngfile);
 	static void blockSplitProgram(uint32_t& horizontalInterval,uint32_t& verticalInterval, std::filesystem::path& pngfile);
 	static void surfaceBlurfilterProgram(float32_t& threshold, std::filesystem::path& pngfile, int32_t& radius);
+	static void sobelEdgeEnhancementProgram(float32_t& strength, std::filesystem::path& pngfile,float32_t& thresholdMin, float32_t& thresholdMax);
 
 	//The following three methods rely on lodepng
 	static void importFile(PngData& data, std::filesystem::path& pngfile);
@@ -322,10 +337,12 @@ public:
 	static bool Grayscale(PngData& input, PngData& result);
 	static bool ChannelGrayScale(PngData& input, PngData& resultR, PngData& resultG, PngData& resultB);
 	static bool VividnessAdjustment(PngData& inputOutput, const float32_t& vividRatio = 0.2f);
+	static bool NatualVividnessAdjustment(PngData& inputOutput, const float32_t& vividRatio = 0.2f);
 	static bool Binarization(PngData& input, PngData& result, const float32_t& threshold = 0.5f);
 	static bool Quaternization(PngData& input, PngData& result, const float32_t& threshold = 0.5f);
 	static bool Hexadecimalization(PngData& input, PngData& result);
 	static bool SurfaceBlur(PngData& input, PngData& result, const int32_t& radius = 1, const float32_t& threshold = 0.5f);
+	static bool SobelEdgeEnhancement(PngData& input, PngData& result, const float32_t& thresholdMin = 0.5f, const float32_t& thresholdMax = 1.0f, const float32_t& strength = 1.0f);
 };
 
 
@@ -634,7 +651,23 @@ inline void PngData::clear()
 
 inline void ImageProcessingTools::GrayColor(const RGBAColor_8i& color, byte& result)
 {
-	result = (color.R + color.G + color.B) * 0.33333f;
+	//result = (color.R + color.G + color.B) * 0.33333f;
+	constexpr float32_t gamma = 2.2f;
+	constexpr float32_t reciprocal = 1.0f / 2.2f;
+	const RGBAColor_32f ratio(0.2973f, 0.6274f, 0.0753);
+
+	RGBAColor_32f gray(color);
+	gray.R = std::powf(gray.R, gamma);
+	gray.G = std::powf(gray.G, gamma);
+	gray.B = std::powf(gray.B, gamma);
+
+	gray *= ratio;
+
+	float32_t sum = gray.R + gray.G + gray.B;
+
+	sum = powf(sum, reciprocal);
+
+	result = sum * maxColorPix;
 }
 
 inline void ImageProcessingTools::BinarizationColor(const RGBAColor_8i& color, const float32_t& threshold, byte& result)
@@ -782,6 +815,31 @@ inline void ImageProcessingTools::VividnessAdjustmentColor(RGBAColor_32f& color,
 	color *= (1.0f + changeMagnification);
 
 	color += avg;
+
+	color.A = Alpha;
+}
+
+inline void ImageProcessingTools::NatualVividnessAdjustmentColor(RGBAColor_32f& color, const float32_t& changeMagnification)
+{
+	//worthless calculation
+	if (fabsf(changeMagnification) < 0.001f) return;
+
+	float32_t Alpha = color.A;
+
+	//R*0.299 + G*0.587 + B*0.114
+	RGBAColor_32f ratio(0.299f, 0.587f, 0.114f);
+	ratio *= color;
+	float32_t avg = ratio.R + ratio.G + ratio.B;
+
+	float32_t max = Max(color.B, Max(color.G, color.R));
+
+	float32_t amtval = fabsf(max - avg) * 2.0f * (-changeMagnification);
+
+	RGBAColor_32f Incremental(max);
+	Incremental -= color;
+	Incremental *= amtval;
+
+	color += Incremental;
 
 	color.A = Alpha;
 }
