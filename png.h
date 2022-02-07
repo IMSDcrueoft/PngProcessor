@@ -85,6 +85,18 @@ static constexpr float32_t pi = 3.1415926f;
 static constexpr float32_t maxColorPix = 255.0f;
 static constexpr float32_t ColorPixTofloat = (1.0f / maxColorPix);
 
+auto Min = [](const auto& left, const auto& right)
+{
+	if (left < right)
+	{
+		return left;
+	}
+	else
+	{
+		return right;
+	}
+};
+
 auto Max = [](const auto& left, const auto& right)
 {
 	if (left > right)
@@ -260,6 +272,8 @@ public:
 		GrayScale = 'G',
 		hexadecimalization = 'h',
 		Hexadecimalization = 'H',
+		mosaic = 'm',
+		MixedGraph = 'M',
 		quaternization = 'q',
 		Quaternization = 'Q',
 		reverseColor = 'r',
@@ -276,6 +290,7 @@ public:
 	};
 
 protected:
+	static void FastGray(const RGBAColor_8i& color, uint16_t& result);
 	static void GrayColor(const RGBAColor_8i& color,byte& result);
 	static void BinarizationColor(const RGBAColor_8i& color,const float32_t& threshold,byte& result);//Too few colors, need to adjust the threshold
 	static void QuaternizationColor(const RGBAColor_8i& color, const float32_t& threshold, byte& result);//Too few colors, need to adjust the threshold
@@ -284,6 +299,12 @@ protected:
 	static void VividnessAdjustmentColor(RGBAColor_32f& color,const float32_t& changeMagnification);
 	static void NatualVividnessAdjustmentColor(RGBAColor_32f& color, const float32_t& changeMagnification);
 	static void ACESToneMappingColor(RGBAColor_32f& color, const float32_t& adapted_lum);
+
+	static void MixedPicturesColor(const byte& colorOut,const byte& colorIn, byte& colorResult, byte& alphaResult);
+	static void filteringMethod1_1(const RGBAColor_8i& colorOut, byte& resultOut, const RGBAColor_8i& colorIn, byte& resultIn);
+	static void filteringMethod1_2(const RGBAColor_8i& colorOut, byte& resultOut, const RGBAColor_8i& colorIn, byte& resultIn);
+	static void filteringMethod2_1(const RGBAColor_8i& colorOut, byte& resultOut, const RGBAColor_8i& colorIn, byte& resultIn);
+	static void filteringMethod1_3(const RGBAColor_8i& colorOut, byte& resultOut, const RGBAColor_8i& colorIn, byte& resultIn);
 
 protected:
 	static float32_t cubicConvolutionZoomFormula(const float32_t& a, const float32_t& x);
@@ -315,6 +336,7 @@ public:
 	static void blockSplitProgram(uint32_t& horizontalInterval,uint32_t& verticalInterval, std::filesystem::path& pngfile);
 	static void surfaceBlurfilterProgram(float32_t& threshold, std::filesystem::path& pngfile, int32_t& radius);
 	static void sobelEdgeEnhancementProgram(float32_t& strength, std::filesystem::path& pngfile,float32_t& thresholdMin, float32_t& thresholdMax);
+	static void mixedPicturesProgram(uint32_t& workMode, std::filesystem::path& pngfileOut, std::filesystem::path& pngfileIn);
 
 	//The following three methods rely on lodepng
 	static void importFile(PngData& data, std::filesystem::path& pngfile);
@@ -343,6 +365,11 @@ public:
 	static bool Hexadecimalization(PngData& input, PngData& result);
 	static bool SurfaceBlur(PngData& input, PngData& result, const int32_t& radius = 1, const float32_t& threshold = 0.5f);
 	static bool SobelEdgeEnhancement(PngData& input, PngData& result, const float32_t& thresholdMin = 0.5f, const float32_t& thresholdMax = 1.0f, const float32_t& strength = 1.0f);
+
+	static bool MixedPictures(
+		PngData& inputOutside, PngData& inputInside,
+		PngData& result,
+		void (*filteringMethod)(const RGBAColor_8i& colorOut, byte& resultOut, const RGBAColor_8i& colorIn, byte& resultIn));
 };
 
 
@@ -649,6 +676,13 @@ inline void PngData::clear()
 	clearRGBA_uint8();
 }
 
+inline void ImageProcessingTools::FastGray(const RGBAColor_8i& color, uint16_t& result)
+{
+	result = (static_cast<uint16_t>(color.R) << 1u) + (static_cast<uint16_t>(color.G) << 2u) + color.G + color.B;
+	//2/8 5/8 1/8
+	result >>= 3u;
+}
+
 inline void ImageProcessingTools::GrayColor(const RGBAColor_8i& color, byte& result)
 {
 	//result = (color.R + color.G + color.B) * 0.33333f;
@@ -859,6 +893,67 @@ inline void ImageProcessingTools::ACESToneMappingColor(RGBAColor_32f& color, con
 	color = (color * (color * A + B)) / (color * (color * C + D) + E);
 
 	color.A = Alpha;
+}
+
+inline void ImageProcessingTools::MixedPicturesColor(const byte& colorOut,const byte& colorIn, byte& colorResult, byte& alphaResult)
+{
+	alphaResult = ~colorOut + colorIn;
+
+	if (alphaResult != 0u)
+		colorResult = (static_cast<uint16_t>(colorIn) << 8u) / alphaResult;
+	else
+		colorResult = 255u;
+}
+
+inline void ImageProcessingTools::filteringMethod1_1(const RGBAColor_8i& colorOut, byte& resultOut, const RGBAColor_8i& colorIn, byte& resultIn)
+{
+	uint16_t g1;
+	uint16_t g2;
+	
+	ImageProcessingTools::FastGray(colorOut, g1);
+	ImageProcessingTools::FastGray(colorIn, g2);
+
+	resultOut = 0b1000'0000 | (g1 >> 1u);//>=128
+	resultIn = (g2 >> 1u);//<=127
+}
+
+inline void ImageProcessingTools::filteringMethod1_2(const RGBAColor_8i& colorOut, byte& resultOut, const RGBAColor_8i& colorIn, byte& resultIn)
+{
+	constexpr uint8_t dividing = 171u;
+	uint16_t g1;
+	uint16_t g2;
+
+	ImageProcessingTools::FastGray(colorOut, g1);
+	ImageProcessingTools::FastGray(colorIn, g2);
+
+	resultOut = dividing + (g1 / 3u);//>=171
+	resultIn = (g2 << 1u) / 3;//<=170
+}
+
+inline void ImageProcessingTools::filteringMethod2_1(const RGBAColor_8i& colorOut, byte& resultOut, const RGBAColor_8i& colorIn, byte& resultIn)
+{
+	constexpr uint8_t dividing = 86u;
+	uint16_t g1;
+	uint16_t g2;
+
+	ImageProcessingTools::FastGray(colorOut, g1);
+	ImageProcessingTools::FastGray(colorIn, g2);
+
+	resultOut = dividing + ((g1 << 1) / 3u);//>=86
+	resultIn = (g2 / 3u);//<=85
+}
+
+inline void ImageProcessingTools::filteringMethod1_3(const RGBAColor_8i& colorOut, byte& resultOut, const RGBAColor_8i& colorIn, byte& resultIn)
+{
+	constexpr uint8_t dividing = 192u;
+	uint16_t g1;
+	uint16_t g2;
+
+	ImageProcessingTools::FastGray(colorOut, g1);
+	ImageProcessingTools::FastGray(colorIn, g2);
+
+	resultOut = dividing + (g1 >> 2u);//>=192
+	resultIn = (static_cast<uint16_t>(g2) * 3u) >> 2u;//<=191
 }
 
 inline float32_t ImageProcessingTools::cubicConvolutionZoomFormula(const float32_t& a, const float32_t& x)

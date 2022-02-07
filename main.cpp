@@ -89,16 +89,19 @@ int main(int argc, char* argv[])
 	ImageProcessingTools::commandStartUps(argc, argv);
 #else
 	std::filesystem::path pngfile;
+	std::filesystem::path pngfile2;
 	clockTimer timer;
 	timer.TimerStart();
 
-	int32_t radius = 1;
+	uint32_t mode = 2;
 	float32_t Ratio = 0.5f;
 	float32_t Weight = -1;
-	pngfile = "D:/pics/0JCT(AV2_1SOJA%@6UFH$HA.png";
+	pngfile = "D:/pics/workshop/G14.png";
+	pngfile2 = "D:/pics/workshop/ROG_Wallpaper_Cybertext.png";
 	//uint32_t exponent = (uint32_t)ImageProcessingTools::Exponent::one;
 
-	ImageProcessingTools::surfaceBlurfilterProgram(Ratio, pngfile, radius);
+	ImageProcessingTools::mixedPicturesProgram(mode, pngfile, pngfile2);
+
 	/*uint32_t x = 1920;
 	uint32_t y = 1080;
 	ImageProcessingTools::blockSplitProgram(x, y, pngfile);*/

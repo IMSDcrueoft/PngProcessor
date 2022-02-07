@@ -467,11 +467,11 @@ bool ImageProcessingTools::AecsHdrToneMapping(PngData& inputOutput, const float3
 #endif
 			for (auto X = 0u; X < inputOutput.width; ++X)
 			{
-				RGBAColor_32f rgba_f = RGBAColor_32f(inputOutput(X, Y));
+				RGBAColor_32f color(inputOutput(X, Y));
 
-				ImageProcessingTools::ACESToneMappingColor(rgba_f, lumRatio);
+				ImageProcessingTools::ACESToneMappingColor(color, lumRatio);
 
-				inputOutput(X, Y) = rgba_f.toRGBAColor_8i();
+				inputOutput(X, Y) = color.toRGBAColor_8i();
 			}
 #if WINDOWS_SYSTEM_CPU_PARALLEL
 		});
@@ -891,16 +891,18 @@ bool ImageProcessingTools::SurfaceBlur(PngData& input, PngData& result, const in
 						 kernel[h + radius][w + radius] = 1.0f - (toGray(pixel) * denominator);
 
 						 sum += kernel[h + radius][w + radius];
+
+						 pixelSum += RGBAColor_32f(input(X + w, Y + h), kernel[h + radius][w + radius]);
 					}
 				}
 
-				for (int64_t h = -radius; h <= radius; ++h)
-				{
-					for (int64_t w = -radius; w <= radius; ++w)
-					{
-						pixelSum += RGBAColor_32f(input(X + w, Y + h), kernel[h + radius][w + radius]);
-					}
-				}
+				//for (int64_t h = -radius; h <= radius; ++h)
+				//{
+				//	for (int64_t w = -radius; w <= radius; ++w)
+				//	{
+				//		
+				//	}
+				//}
 
 				pixelSum /= sum;
 				pixelSum.A = center.A;
@@ -1010,6 +1012,58 @@ bool ImageProcessingTools::SobelEdgeEnhancement(PngData& input, PngData& result,
 	return true;
 }
 
+bool ImageProcessingTools::MixedPictures(PngData& inputOutside, PngData& inputInside,
+	PngData& result,
+	void (*filteringMethod)(const RGBAColor_8i& colorOut, byte& resultOut, const RGBAColor_8i& colorIn, byte& resultIn))
+{
+	if (inputOutside.getRGBA_uint8().size() == 0u || inputInside.getRGBA_uint8().size() == 0u)
+		return false;
+
+	result.width = Min(inputOutside.width, inputInside.width);
+	result.height = Min(inputOutside.height, inputInside.height);
+
+	result.image.resize((static_cast<size_t>(result.width) * result.height) << 1u);//gray and alpha
+
+#if WINDOWS_SYSTEM_CPU_PARALLEL
+	concurrency::parallel_for(0u, result.height, [&inputOutside,&inputInside, &result,&filteringMethod](uint32_t Y) {
+#else
+	CppParallelAccelerator accelerator;
+	std::queue<uint32_t> param;
+
+	for (auto Y = 0u; Y < result.height; ++Y) {
+
+		auto CalculateARowOfPixels = [&inputOutside, &inputInside, &result, &filteringMethod](uint32_t Y) {
+#endif
+			size_t offset = (static_cast<size_t>(Y)*result.width) << 1u;
+
+			for (auto X = 0u; X < result.width; ++X)
+			{
+				byte gray1;
+				byte gray2;
+
+				filteringMethod(inputOutside(X, Y), gray1, inputInside(X, Y), gray2);
+				ImageProcessingTools::MixedPicturesColor(gray1, gray2, result.image[offset], result.image[offset+ 1u]);
+
+				offset += 2;
+			}
+#if WINDOWS_SYSTEM_CPU_PARALLEL
+		});
+#else
+	};
+		// numberOfExecutionThreads threads
+		for (auto i = 0; i < accelerator.GetNumThreads(); i++)
+		{
+			param.push(Y + i);
+		}
+		Y += (accelerator.GetNumThreads() - 1);
+
+		accelerator.Run(CalculateARowOfPixels, param);
+		accelerator.Join();
+}
+#endif
+	return true;
+}
+
 void ImageProcessingTools::importFile(PngData& data, std::filesystem::path& pngfile)
 {
 	auto path = AdaptString::toString(pngfile.wstring());
@@ -1093,6 +1147,7 @@ void ImageProcessingTools::help()
 		<< "[      Block Cut     ]: c     \n"
 		<< "[     Cut horizon    ]: C     \n"
 		<< "[       Mosaic       ]: m       [Feature not currently supported]\n"
+		<< "[   Mixed Pictures   ]: M     \n"
 		<< '\n'
 		<< "Input Sample-->\n"
 		<< "./pngProcessor.exe filename.png z[default zoom] 1.0[zoom ratio:DF] 0.5[center weight:DF] 2[Exponent:DF]\n"
@@ -1157,6 +1212,9 @@ void ImageProcessingTools::help()
 		<< "[threshold(from 1/255 to 1)]\n"
 		<< "[radius(from 1 to 12)]\n"
 		<< '\n'
+		<< "./pngProcessor.exe filenameOut.png M[mixed pictures] 1[WorkMode] filenameIn.png\n"
+		<< "[mixed pictures]\n"
+		<< "[workMode(from 1 to 4,1->1:1,2->1:2,3->2:1,4->1:3)]\n"
 		<< "./pngProcessor.exe filename.png c[cut] 1024[Horizontal Interval:DF] 1024[Vertical Interval:DF]\n"
 		<< "[cut]\n"
 		<< "[Horizontal Interval(>0)]\n"
@@ -1171,6 +1229,7 @@ void ImageProcessingTools::help()
 void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 {
 	std::filesystem::path pngfile;
+	std::filesystem::path pngfile2;
 	char mode = (char)Mode::unknown;
 	clockTimer timer;
 	std::istringstream iss;
@@ -1441,6 +1500,20 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 		//}
 		GetParam(3, interval_vertical);
 		ImageProcessingTools::fastSplitHorizonProgram(interval_vertical, pngfile);
+		break;
+
+	case (int)Mode::MixedGraph:
+		exponent = 1;
+
+		GetParam(3, exponent);
+		GetParam(4, pngfile2);
+
+		if(argCount <= 4)
+		{
+			std::cout << "No Inside picture,Wrong!" << std::endl;
+			exit(0);
+		}
+		ImageProcessingTools::mixedPicturesProgram(exponent, pngfile, pngfile2);
 		break;
 
 	case (int)Mode::filter:
@@ -2293,6 +2366,66 @@ void ImageProcessingTools::sobelEdgeEnhancementProgram(float32_t& strength, std:
 
 		exportFile(result, resultname);
 #endif
+	}
+	else
+	{
+		std::cout << "Something wrong in convert." << std::endl;
+		exit(0);
+	}
+}
+
+void ImageProcessingTools::mixedPicturesProgram(uint32_t& workMode, std::filesystem::path& pngfileOut, std::filesystem::path& pngfileIn)
+{
+	std::cout << "Sobel Edge Enhancement Filter:\n"
+		<< "Input Out Picture:" << pngfileOut << '\n'
+		<< "Input In Picture:" << pngfileIn << '\n' << std::endl;
+
+	void (*filteringMethod)(const RGBAColor_8i&, byte&, const RGBAColor_8i&, byte&) = nullptr;
+
+	Clamp(workMode, 1, 4);
+
+
+	if (workMode == 2)
+	{
+		std::cout << "workMode:1:2\n";
+		filteringMethod = filteringMethod1_2;
+	}
+	else
+		if (workMode == 3)
+		{
+			std::cout << "workMode:2:1\n";
+			filteringMethod = filteringMethod2_1;
+		}
+		else
+			if (workMode == 4)
+			{
+				std::cout << "workMode:1:3\n";
+				filteringMethod = filteringMethod1_3;
+			}
+			else
+			{
+				std::cout << "default workMode:1:1\n";
+				filteringMethod = filteringMethod1_1;
+			}
+
+	std::cout << "Start processing . . ." << std::endl;
+
+	PngData imageOut, imageIn, result;
+
+	importFile(imageOut, pngfileOut);
+	importFile(imageIn, pngfileIn);
+
+	if (ImageProcessingTools::MixedPictures(imageOut, imageIn, result, filteringMethod))
+	{
+		imageOut.clear();
+		imageIn.clear();
+
+		std::wstring resultname;
+		resultname.append(pngfileIn.parent_path()).append(L"/").append(pngfileIn.stem())
+			.append(L"_MixPicture_workMode_").append(std::to_wstring(workMode))
+			.append(pngfileIn.extension());
+
+		exportFile(result.image.data(), result.width, result.height, resultname, LodePNGColorType::LCT_GREY_ALPHA);
 	}
 	else
 	{
