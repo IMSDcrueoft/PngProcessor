@@ -464,7 +464,10 @@ bool ImageProcessingTools::AecsHdrToneMapping(PngData& inputOutput, const float3
 	for (auto Y = 0u; Y < inputOutput.height; ++Y) {
 
 		auto CalculateARowOfPixels = [&inputOutput, &lumRatio](uint32_t Y) {
+
+			if (Y >= inputOutput.height)return;
 #endif
+
 			for (auto X = 0u; X < inputOutput.width; ++X)
 			{
 				RGBAColor_32f color(inputOutput(X, Y));
@@ -509,6 +512,8 @@ bool ImageProcessingTools::ReverseColorImage(PngData& inputOutput)
 	for (auto Y = 0u; Y < inputOutput.height; ++Y) {
 
 		auto CalculateARowOfPixels = [&inputOutput](uint32_t Y) {
+
+			if (Y >= inputOutput.height)return;
 #endif
 			for (auto X = 0u; X < inputOutput.width; ++X)
 			{
@@ -554,6 +559,8 @@ bool ImageProcessingTools::Grayscale(PngData& input, PngData& result)
 	for (auto Y = 0u; Y < input.height; ++Y) {
 
 		auto CalculateARowOfPixels = [&input,&result](uint32_t Y) {
+
+			if (Y >= result.height)return;
 #endif
 			for (auto X = 0u; X < input.width; ++X)
 			{
@@ -628,6 +635,8 @@ bool ImageProcessingTools::VividnessAdjustment(PngData& inputOutput, const float
 	for (auto Y = 0u; Y < inputOutput.height; ++Y) {
 
 		auto CalculateARowOfPixels = [&inputOutput,&vividRatio](uint32_t Y) {
+
+			if (Y >= inputOutput.height)return;
 #endif
 			for (auto X = 0u; X < inputOutput.width; ++X)
 			{
@@ -673,6 +682,8 @@ bool ImageProcessingTools::NatualVividnessAdjustment(PngData& inputOutput, const
 	for (auto Y = 0u; Y < inputOutput.height; ++Y) {
 
 		auto CalculateARowOfPixels = [&inputOutput, &vividRatio](uint32_t Y) {
+
+			if (Y >= inputOutput.height)return;
 #endif
 			for (auto X = 0u; X < inputOutput.width; ++X)
 			{
@@ -721,7 +732,9 @@ bool ImageProcessingTools::Binarization(PngData& input, PngData& result, const f
 
 	for (auto Y = 0u; Y < input.height; ++Y) {
 
-		auto CalculateARowOfPixels = [&input,&result,&threshold](uint32_t Y) {
+		auto CalculateARowOfPixels = [&input, &result, &threshold](uint32_t Y) {
+
+			if (Y >= result.height)return;
 #endif
 			for (auto X = 0u; X < input.width; ++X)
 			{
@@ -767,6 +780,8 @@ bool ImageProcessingTools::Quaternization(PngData& input, PngData& result, const
 	for (auto Y = 0u; Y < input.height; ++Y) {
 
 		auto CalculateARowOfPixels = [&input, &result, &threshold](uint32_t Y) {
+
+			if (Y >= result.height)return;
 #endif
 			for (auto X = 0u; X < input.width; ++X)
 			{
@@ -812,6 +827,8 @@ bool ImageProcessingTools::Hexadecimalization(PngData& input, PngData& result)
 	for (auto Y = 0u; Y < input.height; ++Y) {
 
 		auto CalculateARowOfPixels = [&input, &result](uint32_t Y) {
+
+			if (Y >= result.height)return;
 #endif
 			for (auto X = 0u; X < input.width; ++X)
 			{
@@ -847,8 +864,8 @@ bool ImageProcessingTools::SurfaceBlur(PngData& input, PngData& result, const in
 	auto& resultRGBA = result.getRGBA_uint8();
 	resultRGBA.resize(input.getRGBA_uint8().size());
 
-	uint32_t sideLength = (radius << 1u) + 1u;
-	float32_t denominator = 0.40f / threshold;
+	const uint32_t sideLength = (radius << 1u) + 1u;
+	const float32_t denominator = 0.40f / threshold;
 
 #if WINDOWS_SYSTEM_CPU_PARALLEL
 	concurrency::parallel_for(0u, result.height, [&result, &input, &radius, &denominator,&sideLength](uint32_t Y) {
@@ -871,38 +888,34 @@ bool ImageProcessingTools::SurfaceBlur(PngData& input, PngData& result, const in
 			for (auto X = 0u; X < result.width; ++X)
 			{
 				//tectonic kernel
-				std::vector <std::vector<float32_t>>kernel(sideLength);
+				/*std::vector <std::vector<float32_t>>kernel(sideLength);
 				for (auto& line : kernel)
 					line.resize(sideLength);
+				*/
 
 				//buildKernel
-				RGBAColor_32f center = RGBAColor_32f(input(X, Y));
+				RGBAColor_32f center(input(X, Y));	
+				RGBAColor_32f pixelSum(0.0f, 0.0f, 0.0f, 0.0f);
 
 				float32_t sum = 0.0f;
-				RGBAColor_32f pixelSum(0.0f, 0.0f, 0.0f, 0.0f);
+				float32_t weight;
 
 				for (int64_t h = -radius; h <= radius; ++h)
 				{
 					for (int64_t w = -radius; w <= radius; ++w)
 					{
-						RGBAColor_32f pixel = RGBAColor_32f(input(X + w, Y + h));
+						RGBAColor_32f pixel(input(X + w, Y + h));
 						pixel -= center;
 
-						 kernel[h + radius][w + radius] = 1.0f - (toGray(pixel) * denominator);
+						/*kernel[h + radius][w + radius]*/
+						weight = 1.0f - (toGray(pixel) * denominator);
 
-						 sum += kernel[h + radius][w + radius];
+						sum += weight;//kernel[h + radius][w + radius];
 
-						 pixelSum += RGBAColor_32f(input(X + w, Y + h), kernel[h + radius][w + radius]);
+						pixelSum += RGBAColor_32f(input(X + w, Y + h), weight);
+						//kernel[h + radius][w + radius]);
 					}
 				}
-
-				//for (int64_t h = -radius; h <= radius; ++h)
-				//{
-				//	for (int64_t w = -radius; w <= radius; ++w)
-				//	{
-				//		
-				//	}
-				//}
 
 				pixelSum /= sum;
 				pixelSum.A = center.A;
@@ -1269,6 +1282,13 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 
 	int32_t radius = 1;
 
+	auto GetParam = [&iss, &argValues](const uint32_t& id, auto& target)
+	{
+		iss.clear();
+		iss.str(argValues[id]);
+		iss >> target;
+	};
+
 	switch (mode)
 	{
 	case (int)Mode::zoom:
@@ -1277,21 +1297,15 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 
 		if (argCount > 3)
 		{
-			iss.clear();
-			iss.str(argValues[3]);
-			iss >> param1;
+			GetParam(3, param1);
 
 			if (argCount > 4)
 			{
-				iss.clear();
-				iss.str(argValues[4]);
-				iss >> param2;
+				GetParam(4, param2);
 
 				if (argCount > 5)
 				{
-					iss.clear();
-					iss.str(argValues[5]);
-					iss >> exponent;
+					GetParam(5, exponent);
 				}
 			}
 		}
@@ -1329,15 +1343,11 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 
 		if (argCount > 3)
 		{
-			iss.clear();
-			iss.str(argValues[3]);
-			iss >> param1;
+			GetParam(3, param1);
 
 			if (argCount > 4)
 			{
-				iss.clear();
-				iss.str(argValues[4]);
-				iss >> param2;
+				GetParam(4, param2);
 			}
 		}
 
@@ -1349,10 +1359,9 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 
 		if (argCount > 3)
 		{
-			iss.clear();
-			iss.str(argValues[3]);
-			iss >> param1;
+			GetParam(3, param1);
 		}
+
 		ImageProcessingTools::laplaceSharpenProgram(param1, pngfile);
 		break;
 
@@ -1374,10 +1383,9 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 
 		if (argCount > 3)
 		{
-			iss.clear();
-			iss.str(argValues[3]);
-			iss >> param1;
+			GetParam(3, param1);
 		}
+
 		ImageProcessingTools::hdrToneMappingColorProgram(param1, pngfile);
 		break;
 
@@ -1399,10 +1407,9 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 
 		if (argCount > 3)
 		{
-			iss.clear();
-			iss.str(argValues[3]);
-			iss >> param1;
+			GetParam(3, param1);
 		}
+
 		ImageProcessingTools::vividnessAdjustmentColorProgram(param1, pngfile);
 		break;
 
@@ -1411,10 +1418,9 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 
 		if (argCount > 3)
 		{
-			iss.clear();
-			iss.str(argValues[3]);
-			iss >> param1;
+			GetParam(3, param1);
 		}
+
 		ImageProcessingTools::natualvividnessAdjustmentColorProgram(param1, pngfile);
 		break;
 
@@ -1424,10 +1430,9 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 
 		if (argCount > 3)
 		{
-			iss.clear();
-			iss.str(argValues[3]);
-			iss >> param1;
+			GetParam(3, param1);
 		}
+
 		ImageProcessingTools::binarizationColorProgram(param1, pngfile);
 		break;
 
@@ -1437,10 +1442,9 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 
 		if (argCount > 3)
 		{
-			iss.clear();
-			iss.str(argValues[3]);
-			iss >> param1;
+			GetParam(3, param1);
 		}
+
 		ImageProcessingTools::quaternizationColorProgram(param1,pngfile);
 		break;
 
@@ -1452,15 +1456,11 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 	case (int)Mode::cut:
 		if (argCount > 3)
 		{
-			iss.clear();
-			iss.str(argValues[3]);
-			iss >> interval_horizontal;
+			GetParam(3,interval_horizontal);
 
 			if (argCount > 4)
 			{
-				iss.clear();
-				iss.str(argValues[4]);
-				iss >> interval_vertical;
+				GetParam(4,interval_vertical);
 			}
 		}
 
@@ -1470,9 +1470,7 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 	case (int)Mode::Cut:
 		if (argCount > 3)
 		{
-			iss.clear();
-			iss.str(argValues[3]);
-			iss >> interval_vertical;
+			GetParam(3, interval_vertical);
 		}
 
 		ImageProcessingTools::fastSplitHorizonProgram(interval_vertical, pngfile);
@@ -1483,15 +1481,11 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 
 		if (argCount > 3)
 		{
-			iss.clear();
-			iss.str(argValues[3]);
-			iss >> exponent;
+			GetParam(3,exponent);
 
 			if (argCount > 4)
 			{
-				iss.clear();
-				iss.str(argValues[4]);
-				iss >> pngfile;
+				GetParam(4, pngfile2);
 			}
 		}
 
@@ -1510,20 +1504,15 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 
 		if (argCount > 3)
 		{
-			iss.clear();
-			iss.str(argValues[3]);
-			iss >> param1;
+			GetParam(3, param1);
+
 			if (argCount > 4)
 			{
-				iss.clear();
-				iss.str(argValues[4]);
-				iss >> param2;
+				GetParam(4,param2);
 				
 				if (argCount > 5)
 				{
-					iss.clear();
-					iss.str(argValues[5]);
-					iss >> param3;
+					GetParam(5, param3);
 				}
 			}
 		}
@@ -1537,14 +1526,11 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 
 		if (argCount > 3)
 		{
-			iss.clear();
-			iss.str(argValues[3]);
-			iss >> param1;
+			GetParam(3, param1);
+
 			if (argCount > 4)
 			{
-				iss.clear();
-				iss.str(argValues[4]);
-				iss >> radius;
+				GetParam(4,radius);
 			}
 		}
 
@@ -2156,7 +2142,7 @@ void ImageProcessingTools::blockSplitProgram(uint32_t& horizontalInterval, uint3
 		verticalInterval = 128u;
 
 	std::cout << "Adoption horizontal interval factor:" << horizontalInterval << '\n'
-		<< "Adoption vertical interval factor:" << horizontalInterval << '\n'
+		<< "Adoption vertical interval factor:" << verticalInterval << '\n'
 		<< "Start processing . . ." << std::endl;
 
 	PngData image;

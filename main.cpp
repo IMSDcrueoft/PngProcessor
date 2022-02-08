@@ -96,11 +96,13 @@ int main(int argc, char* argv[])
 	uint32_t mode = 2;
 	float32_t Ratio = 0.5f;
 	float32_t Weight = -1;
-	pngfile = "D:/pics/workshop/G14.png";
+	uint32_t h = 3840;
+	uint32_t w = 2160;
+	pngfile = "D:/pics/4K.png";//"D:/AllClass_1.png";
 	pngfile2 = "D:/pics/workshop/ROG_Wallpaper_Cybertext.png";
 	//uint32_t exponent = (uint32_t)ImageProcessingTools::Exponent::one;
 
-	ImageProcessingTools::mixedPicturesProgram(mode, pngfile, pngfile2);
+	ImageProcessingTools::blockSplitProgram(h,w,pngfile);
 
 	/*uint32_t x = 1920;
 	uint32_t y = 1080;
