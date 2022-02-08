@@ -1234,16 +1234,6 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 	clockTimer timer;
 	std::istringstream iss;
 
-	auto GetParam = [&iss, &argCount,&argValues](const uint32_t& id, auto& target)
-	{
-		if (argCount > id)
-		{
-			iss.clear();
-			iss.str(argValues[id]);
-			iss >> target;
-		}
-	};
-
 	timer.TimerStart();
 
 	if (argCount == 1)
@@ -1285,7 +1275,7 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 		param1 = 0.5f;
 		param2 = 0.64f;
 
-		/*if (argCount > 3)
+		if (argCount > 3)
 		{
 			iss.clear();
 			iss.str(argValues[3]);
@@ -1304,10 +1294,7 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 					iss >> exponent;
 				}
 			}
-		}*/
-		GetParam(3, param1);
-		GetParam(4, param2);
-		GetParam(5, exponent);
+		}
 
 		std::cout << "Input exponent factor:" << exponent << '\n';
 		Clamp(exponent, 1, 4);
@@ -1340,7 +1327,7 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 		param1 = 2.0f;
 		param2 = -0.5f;
 
-		/*if (argCount > 3)
+		if (argCount > 3)
 		{
 			iss.clear();
 			iss.str(argValues[3]);
@@ -1352,9 +1339,7 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 				iss.str(argValues[4]);
 				iss >> param2;
 			}
-		}*/
-		GetParam(3, param1);
-		GetParam(4, param2);
+		}
 
 		ImageProcessingTools::zoomProgramCubicConvolution(param1, pngfile, param2);
 		break;
@@ -1362,26 +1347,24 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 	case (int)Mode::sharpen:
 		param1 = 15.0f;
 
-		/*if (argCount > 3)
+		if (argCount > 3)
 		{
 			iss.clear();
 			iss.str(argValues[3]);
 			iss >> param1;
-		}*/
-		GetParam(3, param1);
+		}
 		ImageProcessingTools::laplaceSharpenProgram(param1, pngfile);
 		break;
 
 	case (int)Mode::Sharpen:
 		param1 = 15.0f;
 
-		//if (argCount > 3)
-		//{
-		//	iss.clear();
-		//	iss.str(argValues[3]);
-		//	iss >> param1;
-		//}
-		GetParam(3, param1);
+		if (argCount > 3)
+		{
+			iss.clear();
+			iss.str(argValues[3]);
+			iss >> param1;
+		}
 		ImageProcessingTools::gaussLaplaceSharpenProgram(param1, pngfile);
 		break;
 
@@ -1389,13 +1372,12 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 	case (int)Mode::ToneMapping:
 		param1 = 1.0f;
 
-		//if (argCount > 3)
-		//{
-		//	iss.clear();
-		//	iss.str(argValues[3]);
-		//	iss >> param1;
-		//}
-		GetParam(3, param1);
+		if (argCount > 3)
+		{
+			iss.clear();
+			iss.str(argValues[3]);
+			iss >> param1;
+		}
 		ImageProcessingTools::hdrToneMappingColorProgram(param1, pngfile);
 		break;
 
@@ -1415,26 +1397,24 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 	case (int)Mode::vividness:
 		param1 = 0.2f;
 
-		//if (argCount > 3)
-		//{
-		//	iss.clear();
-		//	iss.str(argValues[3]);
-		//	iss >> param1;
-		//}
-		GetParam(3, param1);
+		if (argCount > 3)
+		{
+			iss.clear();
+			iss.str(argValues[3]);
+			iss >> param1;
+		}
 		ImageProcessingTools::vividnessAdjustmentColorProgram(param1, pngfile);
 		break;
 
 	case (int)Mode::Vividness:
 		param1 = 0.2f;
 
-		//if (argCount > 3)
-		//{
-		//	iss.clear();
-		//	iss.str(argValues[3]);
-		//	iss >> param1;
-		//}
-		GetParam(3, param1);
+		if (argCount > 3)
+		{
+			iss.clear();
+			iss.str(argValues[3]);
+			iss >> param1;
+		}
 		ImageProcessingTools::natualvividnessAdjustmentColorProgram(param1, pngfile);
 		break;
 
@@ -1442,13 +1422,12 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 	case (int)Mode::Binarization:
 		param1 = 0.5f;
 
-		/*if (argCount > 3)
+		if (argCount > 3)
 		{
 			iss.clear();
 			iss.str(argValues[3]);
 			iss >> param1;
-		}*/
-		GetParam(3, param1);
+		}
 		ImageProcessingTools::binarizationColorProgram(param1, pngfile);
 		break;
 
@@ -1456,13 +1435,12 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 	case (int)Mode::Quaternization:
 		param1 = 0.5f;
 
-		/*if (argCount > 3)
+		if (argCount > 3)
 		{
 			iss.clear();
 			iss.str(argValues[3]);
 			iss >> param1;
-		}*/
-		GetParam(3, param1);
+		}
 		ImageProcessingTools::quaternizationColorProgram(param1,pngfile);
 		break;
 
@@ -1472,7 +1450,7 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 		break;
 
 	case (int)Mode::cut:
-		/*if (argCount > 3)
+		if (argCount > 3)
 		{
 			iss.clear();
 			iss.str(argValues[3]);
@@ -1484,29 +1462,38 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 				iss.str(argValues[4]);
 				iss >> interval_vertical;
 			}
-		}*/
-		GetParam(3, interval_horizontal);
-		GetParam(4, interval_vertical);
+		}
 
 		ImageProcessingTools::blockSplitProgram(interval_horizontal, interval_vertical, pngfile);
 		break;
 
 	case (int)Mode::Cut:
-		//if (argCount > 3)
-		//{
-		//	iss.clear();
-		//	iss.str(argValues[3]);
-		//	iss >> interval_vertical;
-		//}
-		GetParam(3, interval_vertical);
+		if (argCount > 3)
+		{
+			iss.clear();
+			iss.str(argValues[3]);
+			iss >> interval_vertical;
+		}
+
 		ImageProcessingTools::fastSplitHorizonProgram(interval_vertical, pngfile);
 		break;
 
 	case (int)Mode::MixedGraph:
 		exponent = 1;
 
-		GetParam(3, exponent);
-		GetParam(4, pngfile2);
+		if (argCount > 3)
+		{
+			iss.clear();
+			iss.str(argValues[3]);
+			iss >> exponent;
+
+			if (argCount > 4)
+			{
+				iss.clear();
+				iss.str(argValues[4]);
+				iss >> pngfile;
+			}
+		}
 
 		if(argCount <= 4)
 		{
@@ -1521,28 +1508,25 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 		param2 = 1.0f;
 		param3 = 1.0f;
 
-		//if (argCount > 3)
-		//{
-		//	iss.clear();
-		//	iss.str(argValues[3]);
-		//	iss >> param1;
-		//	if (argCount > 4)
-		//	{
-		//		iss.clear();
-		//		iss.str(argValues[4]);
-		//		iss >> param2;
-		//		
-		//		if (argCount > 5)
-		//		{
-		//			iss.clear();
-		//			iss.str(argValues[5]);
-		//			iss >> param3;
-		//		}
-		//	}
-		//}
-		GetParam(3, param1);
-		GetParam(4, param2);
-		GetParam(5, param3);
+		if (argCount > 3)
+		{
+			iss.clear();
+			iss.str(argValues[3]);
+			iss >> param1;
+			if (argCount > 4)
+			{
+				iss.clear();
+				iss.str(argValues[4]);
+				iss >> param2;
+				
+				if (argCount > 5)
+				{
+					iss.clear();
+					iss.str(argValues[5]);
+					iss >> param3;
+				}
+			}
+		}
 
 		ImageProcessingTools::sobelEdgeEnhancementProgram(param3, pngfile, param1, param2);
 		break;
@@ -1551,21 +1535,18 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 		param1 = 0.5f;
 		radius = 1;
 
-		//if (argCount > 3)
-		//{
-		//	iss.clear();
-		//	iss.str(argValues[3]);
-		//	iss >> param1;
-		//	if (argCount > 4)
-		//	{
-		//		iss.clear();
-		//		iss.str(argValues[4]);
-		//		iss >> radius;
-		//	}
-		//}
-
-		GetParam(3, param1);
-		GetParam(4, radius);
+		if (argCount > 3)
+		{
+			iss.clear();
+			iss.str(argValues[3]);
+			iss >> param1;
+			if (argCount > 4)
+			{
+				iss.clear();
+				iss.str(argValues[4]);
+				iss >> radius;
+			}
+		}
 
 		ImageProcessingTools::surfaceBlurfilterProgram(param1, pngfile, radius);
 		break;
