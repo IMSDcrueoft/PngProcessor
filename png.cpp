@@ -1,5 +1,5 @@
 /*
-PNG Processor Version 20220206
+PNG Processor Version 20220210
 
 Copyright (c) 2005-2022 IM&SD
 
@@ -60,7 +60,7 @@ bool ImageProcessingTools::Zoom_DefaultSampling4x4(PngData& input, PngData& resu
 #endif
 		auto GetFloorIndex = [&scaleIndex](const uint32_t& index)
 		{
-			return static_cast<int32_t>(floorf(index * scaleIndex));
+			return static_cast<int64_t>(floorf(index * scaleIndex));
 		};
 
 #if !WINDOWS_SYSTEM_CPU_PARALLEL
@@ -126,7 +126,7 @@ bool ImageProcessingTools::Zoom_DefaultSampling4x4(PngData& input, PngData& resu
 		};
 
 		// numberOfExecutionThreads threads
-		for (auto i = 0; i < accelerator.GetNumThreads(); i++)
+		for (auto i = 0; i < accelerator.GetNumThreads(); ++i)
 		{
 			param.push(Y + i);
 		}
@@ -163,7 +163,7 @@ bool ImageProcessingTools::Zoom_CubicConvolutionSampling4x4(PngData& input, PngD
 
 		auto GetFloorIndex = [&scaleIndex](const uint32_t& index)
 		{
-			return static_cast<int32_t>(floorf(index * scaleIndex));
+			return static_cast<int64_t>(floorf(index * scaleIndex));
 		};
 
 #if !WINDOWS_SYSTEM_CPU_PARALLEL
@@ -236,7 +236,7 @@ bool ImageProcessingTools::Zoom_CubicConvolutionSampling4x4(PngData& input, PngD
 };
 
 		// numberOfExecutionThreads threads
-		for (auto i = 0; i < accelerator.GetNumThreads(); i++)
+		for (auto i = 0; i < accelerator.GetNumThreads(); ++i)
 		{
 			param.push(Y + i);
 		}
@@ -260,7 +260,7 @@ bool ImageProcessingTools::SharpenLaplace3x3(PngData& input, PngData& result,con
 	auto& resultRGBA = result.getRGBA_uint8();
 	resultRGBA.resize(input.getRGBA_uint8().size());
 
-	float32_t factor = -0.01f * strength;
+	const float32_t factor = -0.01f * strength;
 	constexpr float32_t oneHalfRoot = 0.70710678f;
 	constexpr float32_t oneHalfRootPlusOne = oneHalfRoot + 1.0f;
 	
@@ -321,7 +321,7 @@ bool ImageProcessingTools::SharpenLaplace3x3(PngData& input, PngData& result,con
 		};
 
 		// numberOfExecutionThreads threads
-		for (auto i = 0; i < accelerator.GetNumThreads(); i++)
+		for (auto i = 0; i < accelerator.GetNumThreads(); ++i)
 		{
 			param.push(Y + i);
 		}
@@ -344,7 +344,7 @@ bool ImageProcessingTools::SharpenGaussLaplace5x5(PngData& input, PngData& resul
 	result.height = input.height;
 
 	auto& resultRGBA = result.getRGBA_uint8();
-	resultRGBA.resize(static_cast<size_t>(result.width) * result.height);
+	resultRGBA.resize(input.getRGBA_uint8().size());
 
 	float32_t factor = -0.002f * strength;
 	/*
@@ -355,15 +355,6 @@ bool ImageProcessingTools::SharpenGaussLaplace5x5(PngData& input, PngData& resul
 		-4  8  24 8 -4
 		-4  0  8  0 -4
 		-2 -4 -4 -4 -2
-		}
-
-		kernel =
-		{
-		-1 -2 -2 -2 -1
-		-2  0  4  0 -2
-		-2  4  12 4 -2
-		-2  0  4  0 -2
-		-1 -2 -2 -2 -1
 		}
 	*/
 	
@@ -433,7 +424,7 @@ bool ImageProcessingTools::SharpenGaussLaplace5x5(PngData& input, PngData& resul
 };
 
 		// numberOfExecutionThreads threads
-		for (auto i = 0; i < accelerator.GetNumThreads(); i++)
+		for (auto i = 0; i < accelerator.GetNumThreads(); ++i)
 		{
 			param.push(Y + i);
 		}
@@ -482,7 +473,7 @@ bool ImageProcessingTools::AecsHdrToneMapping(PngData& inputOutput, const float3
 		};
 
 		// numberOfExecutionThreads threads
-		for (auto i = 0; i < accelerator.GetNumThreads(); i++)
+		for (auto i = 0; i < accelerator.GetNumThreads(); ++i)
 		{
 			param.push(Y + i);
 		}
@@ -525,7 +516,7 @@ bool ImageProcessingTools::ReverseColorImage(PngData& inputOutput)
 #else
 	};
 		// numberOfExecutionThreads threads
-		for (auto i = 0; i < accelerator.GetNumThreads(); i++)
+		for (auto i = 0; i < accelerator.GetNumThreads(); ++i)
 		{
 			param.push(Y + i);
 		}
@@ -562,9 +553,11 @@ bool ImageProcessingTools::Grayscale(PngData& input, PngData& result)
 
 			if (Y >= result.height)return;
 #endif
+			size_t offset = static_cast<size_t>(input.width) * Y;
+
 			for (auto X = 0u; X < input.width; ++X)
 			{
-				ImageProcessingTools::GrayColor(input(X, Y), result.image[static_cast<size_t>(input.width) * Y + X]);
+				ImageProcessingTools::GrayColor(input(X, Y), result.image[offset + X]);
 			}
 
 #if WINDOWS_SYSTEM_CPU_PARALLEL
@@ -572,7 +565,7 @@ bool ImageProcessingTools::Grayscale(PngData& input, PngData& result)
 #else
 };
 		// numberOfExecutionThreads threads
-		for (auto i = 0; i < accelerator.GetNumThreads(); i++)
+		for (auto i = 0; i < accelerator.GetNumThreads(); ++i)
 		{
 			param.push(Y + i);
 		}
@@ -652,7 +645,7 @@ bool ImageProcessingTools::VividnessAdjustment(PngData& inputOutput, const float
 #else
 	};
 		// numberOfExecutionThreads threads
-		for (auto i = 0; i < accelerator.GetNumThreads(); i++)
+		for (auto i = 0; i < accelerator.GetNumThreads(); ++i)
 		{
 			param.push(Y + i);
 		}
@@ -699,7 +692,7 @@ bool ImageProcessingTools::NatualVividnessAdjustment(PngData& inputOutput, const
 #else
 	};
 		// numberOfExecutionThreads threads
-		for (auto i = 0; i < accelerator.GetNumThreads(); i++)
+		for (auto i = 0; i < accelerator.GetNumThreads(); ++i)
 		{
 			param.push(Y + i);
 		}
@@ -736,9 +729,11 @@ bool ImageProcessingTools::Binarization(PngData& input, PngData& result, const f
 
 			if (Y >= result.height)return;
 #endif
+			size_t offset = static_cast<size_t>(input.width) * Y;
+
 			for (auto X = 0u; X < input.width; ++X)
 			{
-				ImageProcessingTools::BinarizationColor(input(X, Y), threshold, result.image[static_cast<size_t>(input.width) * Y + X]);
+				ImageProcessingTools::BinarizationColor(input(X, Y), threshold, result.image[offset + X]);
 			}
 
 #if WINDOWS_SYSTEM_CPU_PARALLEL
@@ -746,7 +741,7 @@ bool ImageProcessingTools::Binarization(PngData& input, PngData& result, const f
 #else
 	};
 		// numberOfExecutionThreads threads
-		for (auto i = 0; i < accelerator.GetNumThreads(); i++)
+		for (auto i = 0; i < accelerator.GetNumThreads(); ++i)
 		{
 			param.push(Y + i);
 		}
@@ -783,9 +778,11 @@ bool ImageProcessingTools::Quaternization(PngData& input, PngData& result, const
 
 			if (Y >= result.height)return;
 #endif
+			size_t offset = static_cast<size_t>(input.width) * Y;
+
 			for (auto X = 0u; X < input.width; ++X)
 			{
-				ImageProcessingTools::QuaternizationColor(input(X, Y), threshold, result.image[static_cast<size_t>(input.width) * Y + X]);
+				ImageProcessingTools::QuaternizationColor(input(X, Y), threshold, result.image[offset + X]);
 			}
 
 #if WINDOWS_SYSTEM_CPU_PARALLEL
@@ -793,7 +790,7 @@ bool ImageProcessingTools::Quaternization(PngData& input, PngData& result, const
 #else
 	};
 		// numberOfExecutionThreads threads
-		for (auto i = 0; i < accelerator.GetNumThreads(); i++)
+		for (auto i = 0; i < accelerator.GetNumThreads(); ++i)
 		{
 			param.push(Y + i);
 		}
@@ -830,9 +827,11 @@ bool ImageProcessingTools::Hexadecimalization(PngData& input, PngData& result)
 
 			if (Y >= result.height)return;
 #endif
+			size_t offset = static_cast<size_t>(input.width) * Y;
+
 			for (auto X = 0u; X < input.width; ++X)
 			{
-				ImageProcessingTools::HexadecimalizationColor(input(X, Y), result.image[static_cast<size_t>(input.width) * Y + X]);
+				ImageProcessingTools::HexadecimalizationColor(input(X, Y), result.image[offset + X]);
 			}
 
 #if WINDOWS_SYSTEM_CPU_PARALLEL
@@ -840,7 +839,7 @@ bool ImageProcessingTools::Hexadecimalization(PngData& input, PngData& result)
 #else
 	};
 		// numberOfExecutionThreads threads
-		for (auto i = 0; i < accelerator.GetNumThreads(); i++)
+		for (auto i = 0; i < accelerator.GetNumThreads(); ++i)
 		{
 			param.push(Y + i);
 		}
@@ -928,7 +927,7 @@ bool ImageProcessingTools::SurfaceBlur(PngData& input, PngData& result, const in
 };
 
 		// numberOfExecutionThreads threads
-		for (auto i = 0; i < accelerator.GetNumThreads(); i++)
+		for (auto i = 0; i < accelerator.GetNumThreads(); ++i)
 		{
 			param.push(Y + i);
 		}
@@ -1001,9 +1000,11 @@ bool ImageProcessingTools::SobelEdgeEnhancement(PngData& input, PngData& result,
 					Clamp(G, 0.0f, 1.0f);
 				}
 
-				RGBAColor_32f  center(input(X, Y), G);
+				float32_t alpha = input(X, Y).A;
+				RGBAColor_32f  center(input(X, Y),G);
 
 				result(X, Y) = center.toRGBAColor_8i();
+				result(X, Y).A = alpha;
 			}
 #if WINDOWS_SYSTEM_CPU_PARALLEL
 		});
@@ -1011,7 +1012,7 @@ bool ImageProcessingTools::SobelEdgeEnhancement(PngData& input, PngData& result,
 	};
 
 		// numberOfExecutionThreads threads
-		for (auto i = 0; i < accelerator.GetNumThreads(); i++)
+		for (auto i = 0; i < accelerator.GetNumThreads(); ++i)
 		{
 			param.push(Y + i);
 		}
@@ -1022,6 +1023,92 @@ bool ImageProcessingTools::SobelEdgeEnhancement(PngData& input, PngData& result,
 
 }
 #endif // !WINDOWS_SYSTEM_CPU_PARALLEL	
+	return true;
+}
+
+bool ImageProcessingTools::MosaicPixelation(PngData& inputOutput, const uint32_t& sideLength)
+{
+	if (inputOutput.getRGBA_uint8().size() == 0)//Handle it well, otherwise there will be problems in parallel
+		return false;
+
+	//not need this time
+	inputOutput.clearImage();
+
+#if WINDOWS_SYSTEM_CPU_PARALLEL
+	concurrency::parallel_for(0u, (inputOutput.height / sideLength), [&inputOutput, &sideLength](uint32_t Y) {
+		Y *= sideLength;
+#else
+	CppParallelAccelerator accelerator;
+	std::queue<uint32_t> param;
+
+	for (auto Y = 0u; Y < inputOutput.height; ++Y) {
+
+		auto CalculateARowOfPixels = [&inputOutput, &sideLength](uint32_t Y) {
+
+			if (Y >= inputOutput.height)return;
+#endif
+			//add column
+			for (auto h = 0u; (h < sideLength) && ((Y + h) < inputOutput.height); ++h)
+			{
+				for (auto X = 0u; X < inputOutput.width; X += sideLength)
+				{
+					RGBAColor_32f columnSum(inputOutput(X, (Y + h)));
+
+					for (auto w = 1; w < sideLength; ++w)
+					{
+						columnSum += RGBAColor_32f(inputOutput(X + w, (Y + h)));
+					}
+
+					columnSum /= sideLength;
+
+					inputOutput(X, Y) = columnSum.toRGBAColor_8i();
+				}
+			}
+			
+			//add row
+			for (auto X = 0u; X < inputOutput.width; X += sideLength) 
+			{
+				RGBAColor_32f rowSum(inputOutput(X, Y));
+
+				for (auto h = 0u; h < sideLength; ++h)
+				{
+					rowSum += RGBAColor_32f(inputOutput(X, Y + h));
+				}
+				
+				rowSum /= sideLength;
+
+				inputOutput(X, Y) = rowSum.toRGBAColor_8i();
+
+				//set value to column
+				for (auto w = 1u; (X + w) < inputOutput.width; ++w)
+				{
+					inputOutput((X + w), Y) = inputOutput(X, Y);
+				}
+			}
+
+			//copy values
+			for (auto h = 1u; (h < sideLength) && ((Y + h) < inputOutput.height); ++h)
+			{
+				std::copy(&inputOutput(0u, Y), &inputOutput(0u, Y) + inputOutput.width,
+					&inputOutput(0u, Y) + h * inputOutput.width);
+			}
+
+#if WINDOWS_SYSTEM_CPU_PARALLEL
+		});
+#else
+	};
+		// numberOfExecutionThreads threads
+		for (auto i = 0; i < accelerator.GetNumThreads(); ++i)
+		{
+			param.push(Y + sideLength * i);
+		}
+		Y += accelerator.GetNumThreads() * sideLength - 1;
+
+		accelerator.Run(CalculateARowOfPixels, param);
+		accelerator.Join();
+}
+#endif
+
 	return true;
 }
 
@@ -1064,7 +1151,7 @@ bool ImageProcessingTools::MixedPictures(PngData& inputOutside, PngData& inputIn
 #else
 	};
 		// numberOfExecutionThreads threads
-		for (auto i = 0; i < accelerator.GetNumThreads(); i++)
+		for (auto i = 0; i < accelerator.GetNumThreads(); ++i)
 		{
 			param.push(Y + i);
 		}
@@ -1159,7 +1246,7 @@ void ImageProcessingTools::help()
 		<< "[ Natual Vivid Adjust]: V     \n"
 		<< "[      Block Cut     ]: c     \n"
 		<< "[     Cut horizon    ]: C     \n"
-		<< "[       Mosaic       ]: m       [Feature not currently supported]\n"
+		<< "[       Mosaic       ]: m     \n"
 		<< "[   Mixed Pictures   ]: M     \n"
 		<< '\n'
 		<< "Input Sample-->\n"
@@ -1223,11 +1310,16 @@ void ImageProcessingTools::help()
 		<< "./pngProcessor.exe filename.png F[surface blur filter] 0.5[threshold:DF] 2[radius:DF]\n"
 		<< "[surface blur filter]\n"
 		<< "[threshold(from 1/255 to 1)]\n"
-		<< "[radius(from 1 to 12)]\n"
+		<< "[radius(from 1 to 24)]\n"
+		<< '\n'
+		<< "./pngProcessor.exe filenameOut.png m[Mosaic] 4[mosaic side length:DF]\n"
+		<< "[Mosaic]\n"
+		<< "[mosaic side length(from 2 to 512)]\n"
 		<< '\n'
 		<< "./pngProcessor.exe filenameOut.png M[mixed pictures] 1[WorkMode] filenameIn.png\n"
 		<< "[mixed pictures]\n"
 		<< "[workMode(from 1 to 4,1->1:1,2->1:2,3->2:1,4->1:3)]\n"
+		<< '\n'
 		<< "./pngProcessor.exe filename.png c[cut] 1024[Horizontal Interval:DF] 1024[Vertical Interval:DF]\n"
 		<< "[cut]\n"
 		<< "[Horizontal Interval(>0)]\n"
@@ -1474,6 +1566,17 @@ void ImageProcessingTools::commandStartUps(int32_t argCount, STR argValues[])
 		}
 
 		ImageProcessingTools::fastSplitHorizonProgram(interval_vertical, pngfile);
+		break;
+
+	case (int)Mode::mosaicPixelation:
+		exponent = 4u;
+
+		if (argCount > 3)
+		{
+			GetParam(3, exponent);
+		}
+
+		ImageProcessingTools::mosaicPixelationProgram(exponent, pngfile);
 		break;
 
 	case (int)Mode::MixedGraph:
@@ -2099,7 +2202,8 @@ void ImageProcessingTools::fastSplitHorizonProgram(uint32_t& splitInterval, std:
 		std::wstring resultnamepart;
 
 		resultnamepart.append(pngfile.parent_path()).append(L"/").append(pngfile.stem())
-			.append(L"_splitHorizon_slice_");
+			.append(L"_splitHorizon_").append(std::to_wstring(splitInterval))
+			.append(L"slice_");
 
 		for (size_t Current = 0u, currentSlice = 1u; Current < image.image.size(); Current += byteSplitInterval, ++currentSlice)
 		{
@@ -2176,7 +2280,7 @@ void ImageProcessingTools::blockSplitProgram(uint32_t& horizontalInterval, uint3
 		std::vector<std::vector<byte>>LineBlocks(horizontalSplitNum);
 		//to ensure space is enough
 		for (auto& blocks : LineBlocks)
-			blocks.reserve(static_cast<size_t>(horizontalInterval) * verticalInterval << 2u);
+			blocks.reserve((static_cast<size_t>(horizontalInterval) * verticalInterval) << 2u);
 
 		std::vector<std::unique_ptr<std::thread>> allthreads;
 
@@ -2192,6 +2296,8 @@ void ImageProcessingTools::blockSplitProgram(uint32_t& horizontalInterval, uint3
 		std::wstring resultnamepart;
 
 		resultnamepart.append(pngfile.parent_path()).append(L"/").append(pngfile.stem())
+			.append(L"_h_").append(std::to_wstring(horizontalInterval))
+			.append(L"_v_").append(std::to_wstring(verticalInterval))
 			.append(L"_slice_");
 
 		const auto& data = image.image.data();
@@ -2248,7 +2354,7 @@ void ImageProcessingTools::surfaceBlurfilterProgram(float32_t& threshold, std::f
 
 	std::cout<< "Input radius factor:" << radius << '\n' << std::endl;
 
-	Clamp(radius, 1u, 12u);
+	Clamp(radius, 1u, 24u);
 
 	std::cout << "Adoption radius factor:" << radius << '\n'
 		<< "Start processing . . ." << std::endl;
@@ -2332,6 +2438,43 @@ void ImageProcessingTools::sobelEdgeEnhancementProgram(float32_t& strength, std:
 		result.clearRGBA_uint8();
 
 		exportFile(result, resultname);
+#endif
+	}
+	else
+	{
+		std::cout << "Something wrong in convert." << std::endl;
+		exit(0);
+	}
+}
+
+void ImageProcessingTools::mosaicPixelationProgram(uint32_t& sideLength, std::filesystem::path& pngfile)
+{
+	std::cout << "Mosaic Pixelation:\n"
+		<< "Input masaic length:" << sideLength << '\n' << std::endl;
+
+	Clamp(sideLength, 2u, 512u);
+
+	std::cout << "Adoption  masaic length:" << sideLength << '\n'
+		<< "Start processing . . ." << std::endl;
+
+	PngData image;
+	importFile(image, pngfile);
+
+	if (ImageProcessingTools::MosaicPixelation(image,sideLength))
+	{
+		std::wstring resultname;
+		resultname.append(pngfile.parent_path()).append(L"/").append(pngfile.stem())
+			.append(L"_mosaic_").append(std::to_wstring(sideLength))
+			.append(pngfile.extension());
+
+#if LITTLE_ENDIAN
+		exportFile(reinterpret_cast<byte*>(image.getRGBA_uint8().data()), image.width, image.height, resultname);
+#else
+		//load result into stream to save to file
+		image.loadRGBAtoByteStream();
+		image.clearRGBA_uint8();
+
+		exportFile(image, resultname);
 #endif
 	}
 	else

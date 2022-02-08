@@ -93,7 +93,7 @@ int main(int argc, char* argv[])
 	clockTimer timer;
 	timer.TimerStart();
 
-	uint32_t mode = 2;
+	uint32_t mode = 16;
 	float32_t Ratio = 0.5f;
 	float32_t Weight = -1;
 	uint32_t h = 3840;
@@ -102,7 +102,7 @@ int main(int argc, char* argv[])
 	pngfile2 = "D:/pics/workshop/ROG_Wallpaper_Cybertext.png";
 	//uint32_t exponent = (uint32_t)ImageProcessingTools::Exponent::one;
 
-	ImageProcessingTools::blockSplitProgram(h,w,pngfile);
+	ImageProcessingTools::mosaicPixelationProgram(mode,pngfile);
 
 	/*uint32_t x = 1920;
 	uint32_t y = 1080;

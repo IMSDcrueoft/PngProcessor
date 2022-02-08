@@ -1,6 +1,6 @@
 #pragma once
 /*
-PNG Processor Version 20220206
+PNG Processor Version 20220210
 
 Copyright (c) 2005-2022 IM&SD
 
@@ -26,10 +26,6 @@ so you should also comply with the requirements of its header declaration
 #ifndef PNG
 #define PNG
 
-#include "lodepng.h"
-#include "AdaptString.h"
-#include "CppParallelAccelerator.h"
-#include "clockTimer.h"
 #include <cassert>
 #include <emmintrin.h>
 #include <filesystem>
@@ -38,6 +34,10 @@ so you should also comply with the requirements of its header declaration
 #include <sstream>
 #include <tuple>
 #include <thread>
+#include "lodepng.h"
+#include "AdaptString.h"
+#include "CppParallelAccelerator.h"
+#include "clockTimer.h"
 
 /*
 * Processors in different working modes need to be treated differently
@@ -57,9 +57,7 @@ so you should also comply with the requirements of its header declaration
 #include<ppl.h>
 #endif //PARALLELISM
 
-
 /*
-// [min,max)
 #define Clamp(val,min,max)									                                      \
 {                                                                                                 \
 	assert((min) < (max) && "wrong! min is larger than max in Clamp.");                           \
@@ -272,7 +270,7 @@ public:
 		GrayScale = 'G',
 		hexadecimalization = 'h',
 		Hexadecimalization = 'H',
-		mosaic = 'm',
+		mosaicPixelation = 'm',
 		MixedGraph = 'M',
 		quaternization = 'q',
 		Quaternization = 'Q',
@@ -336,6 +334,7 @@ public:
 	static void blockSplitProgram(uint32_t& horizontalInterval,uint32_t& verticalInterval, std::filesystem::path& pngfile);
 	static void surfaceBlurfilterProgram(float32_t& threshold, std::filesystem::path& pngfile, int32_t& radius);
 	static void sobelEdgeEnhancementProgram(float32_t& strength, std::filesystem::path& pngfile,float32_t& thresholdMin, float32_t& thresholdMax);
+	static void mosaicPixelationProgram(uint32_t& sideLength, std::filesystem::path& pngfile);
 	static void mixedPicturesProgram(uint32_t& workMode, std::filesystem::path& pngfileOut, std::filesystem::path& pngfileIn);
 
 	//The following three methods rely on lodepng
@@ -365,7 +364,7 @@ public:
 	static bool Hexadecimalization(PngData& input, PngData& result);
 	static bool SurfaceBlur(PngData& input, PngData& result, const int32_t& radius = 1, const float32_t& threshold = 0.5f);
 	static bool SobelEdgeEnhancement(PngData& input, PngData& result, const float32_t& thresholdMin = 0.5f, const float32_t& thresholdMax = 1.0f, const float32_t& strength = 1.0f);
-
+	static bool MosaicPixelation(PngData& inputOutput, const uint32_t& sideLength = 2u);
 	static bool MixedPictures(
 		PngData& inputOutside, PngData& inputInside,
 		PngData& result,
