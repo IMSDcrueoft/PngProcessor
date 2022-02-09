@@ -81,7 +81,7 @@ freely, subject to the following restrictions:
 //	//the pixels are now in the vector "image", 4 bytes per pixel, ordered RGBARGBA..., use it as texture, draw it, ...
 //	//State state contains extra information about the PNG such as text chunks, ...
 //}
-#define DEBUG false
+#define DEBUG true
 
 int main(int argc, char* argv[])
 {
@@ -93,7 +93,7 @@ int main(int argc, char* argv[])
 	clockTimer timer;
 	timer.TimerStart();
 
-	uint32_t mode = 16;
+	uint32_t mode = 2;
 	float32_t Ratio = 0.5f;
 	float32_t Weight = -1;
 	uint32_t h = 3840;
