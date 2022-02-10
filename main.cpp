@@ -81,7 +81,7 @@ freely, subject to the following restrictions:
 //	//the pixels are now in the vector "image", 4 bytes per pixel, ordered RGBARGBA..., use it as texture, draw it, ...
 //	//State state contains extra information about the PNG such as text chunks, ...
 //}
-#define DEBUG true
+#define DEBUG false
 
 int main(int argc, char* argv[])
 {
