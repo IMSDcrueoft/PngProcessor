@@ -2073,7 +2073,7 @@ void ImageProcessingTools::mosaicPixelationProgram(uint32_t& sideLength, std::fi
 
 void ImageProcessingTools::mixedPicturesProgram(uint32_t& workMode, std::filesystem::path& pngfileOut, std::filesystem::path& pngfileIn)
 {
-	std::cout << "Sobel Edge Enhancement Filter:\n"
+	std::cout << "Mixed Pictures:\n"
 		<< "Input Out Picture:" << pngfileOut << '\n'
 		<< "Input In Picture:" << pngfileIn << '\n' << std::endl;
 
