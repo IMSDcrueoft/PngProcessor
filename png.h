@@ -36,7 +36,6 @@ so you should also comply with the requirements of its header declaration
 #include <thread>
 #include "lodepng.h"
 #include "AdaptString.h"
-#include "CppParallelAccelerator.h"
 #include "clockTimer.h"
 
 /*
@@ -57,6 +56,7 @@ so you should also comply with the requirements of its header declaration
 #include<ppl.h>
 namespace parallel = concurrency;
 #else
+#include "CppParallelAccelerator.h"
 using parallel = CppParallelAccelerator;
 #endif //PARALLELISM
 
