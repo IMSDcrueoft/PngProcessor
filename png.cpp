@@ -849,7 +849,7 @@ void ImageProcessingTools::help()
 		<< "[center weight(from 0.25 to 13.0, 0.25:similar to MSAAx16, 1.0 : similar to bilinear, >1:sharp)]\n"
 		<< "[Exponent(from 1 to 4:0.5, 1.0, 2.0, 4.0)]\n"
 		<< '\n'
-		<< "./pngProcessor.exe filename.png Z[bicubic zoom] -1.0[formula factor:DF]\n"
+		<< "./pngProcessor.exe filename.png Z[bicubic zoom] 1.0[zoom ratio:DF] -1.0[formula factor:DF]\n"
 		<< "[bicubic zoom]\n"
 		<< "[zoom ratio(from 0.001 to 32.0)]\n"
 		<< "[formula factor(from -3.0 to -0.1)]\n"
