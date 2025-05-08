@@ -1,4 +1,5 @@
 # PNG Processor
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/IMSDcrueoft/PngProcessor)
 A powerful PNG image processing tool with a wide range of image manipulation capabilities.
 
 # Overview
