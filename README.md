@@ -31,7 +31,7 @@ PNG Processor offers a comprehensive set of image processing capabilities:
 - Splitting/Cutting: Horizontal and block splitting
 - Mixing: Combine multiple images
 - Encryption: XOR-based image encryption
-##Usage
+## Usage
 The application is controlled via command-line arguments with the following general format:
 ```
 PngProcessor [input_file] [mode] [parameters...]  
